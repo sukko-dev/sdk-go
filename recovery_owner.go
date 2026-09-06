@@ -242,7 +242,7 @@ func (c *Client) admitReplayFailure(channel string) {
 
 // admitGrant hands the channels a subscription_ack granted to the recovery owner
 // (decode goroutine), so it re-drives any retained replay for those channels on
-// this epoch (T130).
+// this epoch.
 func (c *Client) admitGrant(e *epoch, channels []string) {
 	if len(channels) == 0 {
 		return

@@ -14,7 +14,7 @@ import (
 // epoch context, its cancel, a WaitGroup for the spawned goroutines, the pong
 // signal channel, and a first-cause-wins termination slot. It is created fresh
 // per dial and torn down wholesale on every reconnect; no goroutine survives its
-// epoch (FR-009). Only timers are epoch-scoped.
+// epoch. Only timers are epoch-scoped.
 type epoch struct {
 	ctx    context.Context
 	cancel context.CancelFunc

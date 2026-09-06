@@ -9,7 +9,7 @@ import (
 	"time"
 )
 
-// TestRESTPublishRoundTrip is the REST happy path (T159/SC-007): a client with no
+// TestRESTPublishRoundTrip is the REST happy path: a client with no
 // WebSocket publishes over HTTP and gets a *PublishResult back; the request reaches the
 // gateway with the JWT in the Authorization header and the payload nested under the
 // contract's inner `data`.
@@ -66,7 +66,7 @@ func TestRESTPublishQueryAuth(t *testing.T) {
 	}
 }
 
-// TestRESTPublishErrorTable is the FR-010 status→typed-error matrix (T157): every coded
+// TestRESTPublishErrorTable is the status→typed-error matrix: every coded
 // response maps to its typed error, with the two 403s discriminated by struct type.
 func TestRESTPublishErrorTable(t *testing.T) {
 	tests := []struct {
@@ -101,7 +101,7 @@ func TestRESTPublishErrorTable(t *testing.T) {
 	}
 }
 
-// TestRESTPublishRetryAfter pins Retry-After on a 429 three ways (NFR-005(ss)):
+// TestRESTPublishRetryAfter pins Retry-After on a 429 three ways:
 // present-non-zero ⇒ that duration, present-zero ⇒ a non-nil zero (retry now), absent ⇒
 // nil — the pointer distinguishing "said nothing" from "retry immediately".
 func TestRESTPublishRetryAfter(t *testing.T) {
@@ -147,8 +147,8 @@ func TestRESTPublishRetryAfter(t *testing.T) {
 	}
 }
 
-// TestRESTPublishRejectsBeforeRequest is the REST leg of the payload pre-check
-// (T158): a non-object and an oversize payload each return the typed error with ZERO
+// TestRESTPublishRejectsBeforeRequest is the REST leg of the payload pre-check:
+// a non-object and an oversize payload each return the typed error with ZERO
 // requests recorded — the shared pre-check fires before any network I/O.
 func TestRESTPublishRejectsBeforeRequest(t *testing.T) {
 	oversize := strings.Repeat("a", DefaultMaxPublishSize-7)
@@ -176,8 +176,8 @@ func TestRESTPublishRejectsBeforeRequest(t *testing.T) {
 	}
 }
 
-// TestRESTPublishAPIKeyOnlyRejected is the credential-class pre-check on the REST leg
-// (T106): an API-key-only client is refused before any request.
+// TestRESTPublishAPIKeyOnlyRejected is the credential-class pre-check on the
+// REST leg: an API-key-only client is refused before any request.
 func TestRESTPublishAPIKeyOnlyRejected(t *testing.T) {
 	g := newFakeGateway(t)
 	g.route(restPublishPath, gatewayResponse{status: 200, body: `{"status":"accepted","channel":"acme.x"}`})

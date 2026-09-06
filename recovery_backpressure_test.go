@@ -67,7 +67,7 @@ func (c *floodThenLocalCloseConn) Read(ctx context.Context) ([]byte, error) {
 func (c *floodThenLocalCloseConn) Send(context.Context, []byte) error { return nil }
 func (c *floodThenLocalCloseConn) Close(int, string) error            { return nil }
 
-// backpressureStep is the pure counting rule behind ErrConsumerTooSlow (T132): a
+// backpressureStep is the pure counting rule behind ErrConsumerTooSlow: a
 // slow-client 1008 that backed up increments (and terminates at max), a clean epoch
 // resets (the consumer resumed), and a non-1008 death that backed up freezes the run.
 func TestBackpressureStep(t *testing.T) {

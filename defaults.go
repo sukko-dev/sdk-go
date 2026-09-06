@@ -72,7 +72,7 @@ const (
 	// MaxTokenSourceAttempts is how many consecutive TokenSource failures are
 	// tolerated on the connected refresh path before the client terminates with
 	// ErrTokenSourceFailed. The count is consecutive and resets on any success. A
-	// TokenSource failure DURING a reconnect is non-terminal (FR-005): the client
+	// TokenSource failure DURING a reconnect is non-terminal: the client
 	// keeps backing off rather than dialing a credential it knows is dead.
 	MaxTokenSourceAttempts = 5
 )

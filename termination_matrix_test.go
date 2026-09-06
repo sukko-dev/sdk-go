@@ -8,7 +8,7 @@ import (
 	"github.com/coder/websocket"
 )
 
-// This file is T084: the termination matrix, driven from the same policy tables
+// This file is the termination matrix, driven from the same policy tables
 // the supervisor classifies against (policy.go). Each row asserts the observable
 // outcome of one ending — a re-dial (reconnect-class), a terminal stop (Err
 // non-nil, one dial), or, under WithReconnect(false), a clean stop (Err nil).

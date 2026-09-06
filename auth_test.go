@@ -427,7 +427,7 @@ func TestTokenSourceFetchThenSend(t *testing.T) {
 // TestTokenSourceFailureSurfacesAndRetries covers a pre-dial fetch failure (B1):
 // the first dial never goes out, Connect returns the fetch error, an in-band
 // *TokenSourceError{Attempt:1} is surfaced, and the client falls into a
-// reconnect-class backoff — non-terminal, exactly FR-005 line 63.
+// reconnect-class backoff — non-terminal, never a manufactured terminal state.
 func TestTokenSourceFailureSurfacesAndRetries(t *testing.T) {
 	f := newFakeWS(t)
 	f.script(epochScript{})
@@ -516,7 +516,7 @@ func TestTokenSourceExhaustionTerminates(t *testing.T) {
 // TestTokenSourceNotFetchedWhileDisconnected pins finding 1: with no live socket
 // (during a reconnect backoff) the owner must NOT invoke TokenSource — a
 // disconnected fetch failure would burn a connected-path exhaustion strike during
-// a backoff FR-005 says is non-terminal.
+// a backoff the auth contract says is non-terminal.
 func TestTokenSourceNotFetchedWhileDisconnected(t *testing.T) {
 	f := newFakeWS(t)
 	f.script(epochScript{closeAfter: 1011}, epochScript{}) // epoch 1 drops immediately

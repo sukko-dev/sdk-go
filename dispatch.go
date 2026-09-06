@@ -12,7 +12,7 @@ import (
 // surfaced) with errors.Is.
 var errNotSurfaceFrame = errors.New("sukko: frame is not a surface-disposition frame")
 
-// The wire→event mapping: FR-001a's dispatch table in code.
+// The wire→event mapping: the contract's dispatch table in code.
 //
 // Every server frame the SDK decodes reaches the caller in one of three ways,
 // and the disposition table names which. The mapping here handles the stateless
@@ -85,11 +85,11 @@ var dispositionTable = map[string]eventDisposition{
 //
 // It handles the dispSurface rows only; a dispClientDerived or dispInternalSilent
 // frame reaching here is a caller bug, reported as an error rather than silently
-// producing nothing. Presence validation (T024a, §II) rejects a frame whose
+// producing nothing. Presence validation (§II) rejects a frame whose
 // channel is empty where the contract requires it and empty is meaningless — the
 // only presence check decidable after decode, since a missing string and an
 // empty string are then indistinguishable. gap's empty last_pos is deliberately
-// not rejected: FR-006 treats it as a valid un-anchorable gap.
+// not rejected: the recovery contract treats it as a valid un-anchorable gap.
 //
 // Phase-5 constraint: several dispSurface frames are also single-flight
 // terminators (history_complete/history_error end a history, replay_complete
@@ -135,7 +135,7 @@ func surfaceEvent(decoded any) (Event, error) {
 			return nil, err
 		}
 		// LastPos may be empty; that is a valid un-anchorable gap, not a
-		// malformed frame (FR-006).
+		// malformed frame.
 		return &Gap{
 			Channel: f.Channel,
 			FromSeq: f.FromSeq,

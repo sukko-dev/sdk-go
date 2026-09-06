@@ -10,7 +10,7 @@ import (
 // returns after a local pre-check and the frame write, and the server's outcome
 // arrives in-band on Messages() as *PublishAccepted or *PublishError — the wire
 // protocol has no per-call id, so a synchronous signature would be a false
-// request/response correlation (FR-001b). For a genuine synchronous result, use
+// request/response correlation. For a genuine synchronous result, use
 // RESTPublish.
 //
 // Publish REQUIRES a live socket — a publish is an action with no meaning offline — so

@@ -88,7 +88,7 @@ func TestPossibleGapsClearOnAdmission(t *testing.T) {
 	}
 }
 
-// TestPossibleGapDirectDegrade (T134 Direct row): a channel granted but cursorless
+// TestPossibleGapDirectDegrade (Direct degrade row): a channel granted but cursorless
 // (a message with no pos — the Direct backend) yields exactly one coalesced
 // *PossibleGap{Channels} on reconnect, and the reconnect is answered with
 // reconnect_ack{messages_replayed:0} (not not_available), per the real server.
@@ -139,7 +139,7 @@ func TestPossibleGapDirectDegrade(t *testing.T) {
 	}
 }
 
-// TestPossibleGapKafkaNoGap (T134 Kafka row): a channel that held a cursor (a message
+// TestPossibleGapKafkaNoGap (Kafka degrade row): a channel that held a cursor (a message
 // WITH pos) is replayable across the reconnect — zero *PossibleGap.
 func TestPossibleGapKafkaNoGap(t *testing.T) {
 	f := newFakeWS(t)
@@ -178,7 +178,7 @@ func TestPossibleGapKafkaNoGap(t *testing.T) {
 	}
 }
 
-// TestPossibleGapNotAvailableDegrade (T134 not_available row): a
+// TestPossibleGapNotAvailableDegrade (not_available degrade row): a
 // reconnect_error{not_available} reaches the same degraded outcome — one
 // *PossibleGap for the cursorless-granted snapshot.
 func TestPossibleGapNotAvailableDegrade(t *testing.T) {
@@ -216,7 +216,7 @@ func TestPossibleGapNotAvailableDegrade(t *testing.T) {
 	}
 }
 
-// TestPossibleGapNeverGrantedExcluded (T135): a channel that was DESIRED but never
+// TestPossibleGapNeverGrantedExcluded: a channel that was DESIRED but never
 // granted appears in no *PossibleGap — the snapshot is the granted set, not desired.
 func TestPossibleGapNeverGrantedExcluded(t *testing.T) {
 	f := newFakeWS(t)
@@ -252,7 +252,7 @@ func TestPossibleGapNeverGrantedExcluded(t *testing.T) {
 	}
 }
 
-// TestPossibleGapUnanchorableGap (T135): a gap with an empty last_pos surfaces
+// TestPossibleGapUnanchorableGap: a gap with an empty last_pos surfaces
 // *Gap{LastPos:""} PLUS an immediate *PossibleGap for that channel, and drives ZERO
 // replay frames.
 func TestPossibleGapUnanchorableGap(t *testing.T) {
@@ -290,7 +290,7 @@ func TestPossibleGapUnanchorableGap(t *testing.T) {
 	}
 }
 
-// TestPossibleGapUnionAndClear (T135): union-on-retake across a failed reconnect
+// TestPossibleGapUnionAndClear: union-on-retake across a failed reconnect
 // dial, then clear-on-admission — the next clean reconnect emits none.
 func TestPossibleGapUnionAndClear(t *testing.T) {
 	f := newFakeWS(t)
@@ -344,7 +344,7 @@ func TestPossibleGapUnionAndClear(t *testing.T) {
 	}
 }
 
-// TestPossibleGapEmittedBeforeTerminal (T135): a client that dies with a pending
+// TestPossibleGapEmittedBeforeTerminal: a client that dies with a pending
 // cursorless-granted snapshot (reconnect disabled, so it never drains at a reconnect)
 // still surfaces the *PossibleGap, and BEFORE the final *Terminal.
 func TestPossibleGapEmittedBeforeTerminal(t *testing.T) {

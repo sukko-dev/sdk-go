@@ -133,7 +133,7 @@ func TestClientCloseWithoutConnect(t *testing.T) {
 
 // TestClientTerminalFailure covers a terminal handshake failure (401): Connect
 // returns the typed error, the client ends in StateError with Err() non-nil, and
-// the final *Terminal carries the cause. This is the discrimination T080 pins —
+// the final *Terminal carries the cause. This is the pinned discrimination —
 // distinct from a clean Close, which leaves Err() nil.
 func TestClientTerminalFailure(t *testing.T) {
 	f := newFakeWS(t)

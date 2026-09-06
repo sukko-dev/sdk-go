@@ -62,7 +62,7 @@ func (c *oneShotConn) Read(ctx context.Context) ([]byte, error) {
 func (c *oneShotConn) Send(context.Context, []byte) error { return nil }
 func (c *oneShotConn) Close(int, string) error            { return nil }
 
-// TestClientDecodePanicContainedAndReconnects pins T077/T086: a panic in the
+// TestClientDecodePanicContainedAndReconnects: a panic in the
 // decode goroutine is recovered — it does NOT propagate to the test process —
 // surfaces an in-band *InternalError{Op,Value,Stack}, and tears the epoch down to
 // reconnect on the normal backoff path (a panic ≈ disconnect, §IV), rather than
@@ -132,7 +132,7 @@ func TestClientDecodePanicContainedAndReconnects(t *testing.T) {
 	ec.waitClosed(t)
 }
 
-// TestClientHeartbeatKeepsAlive pins the healthy half of T073: each
+// TestClientHeartbeatKeepsAlive pins the healthy half of the heartbeat contract: each
 // HeartbeatInterval the client sends a `heartbeat`, and a server that replies
 // `pong` disarms the pong deadline — so the connection stays up and never
 // re-dials. The disarm is observed via the fake clock (the pong timer stops).
@@ -175,7 +175,7 @@ func TestClientHeartbeatKeepsAlive(t *testing.T) {
 	ec.waitClosed(t)
 }
 
-// TestClientHeartbeatTimeoutReconnects pins the timeout half of T073: a server
+// TestClientHeartbeatTimeoutReconnects pins the timeout half of the heartbeat contract: a server
 // that withholds the pong lets the pong deadline fire, which closes locally with
 // CloseCodeHeartbeatTimeout (4999) — classified DIRECTLY as {4999, local}
 // reconnect-class, not read back as a remote close — so the client surfaces a
@@ -238,7 +238,7 @@ func (c *floodConn) Read(ctx context.Context) ([]byte, error) {
 func (c *floodConn) Send(context.Context, []byte) error { return nil }
 func (c *floodConn) Close(int, string) error            { return nil }
 
-// TestClientHeartbeatSuspendedUnderBackpressure pins T073's suspension clause and
+// TestClientHeartbeatSuspendedUnderBackpressure pins the heartbeat suspension clause and
 // review finding 3's window logic: while the decode loop is parked on
 // back-pressure (a slow consumer), a fired pong deadline must NOT close 4999 —
 // the server's own 1008 owns the slow-client verdict, and the SDK must not

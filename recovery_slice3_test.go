@@ -44,7 +44,7 @@ func subscribeAndReplay(t *testing.T, f *fakeWS) (*Client, *fakeClock, *eventCol
 	return c, fc, ec
 }
 
-// TestRecoveryDeadlineInterruptsStuckReplay (T129/T139 — deadline trigger): a
+// TestRecoveryDeadlineInterruptsStuckReplay (deadline trigger): a
 // replay whose replay_complete never arrives is declared interrupted once the
 // recovery deadline elapses, surfacing *RecoveryInterruptedError{replay, t.a}.
 func TestRecoveryDeadlineInterruptsStuckReplay(t *testing.T) {
@@ -69,7 +69,7 @@ func TestRecoveryDeadlineInterruptsStuckReplay(t *testing.T) {
 	}
 }
 
-// TestRecoveryReplayRejectionInterrupts (T139 — server-rejection trigger): a
+// TestRecoveryReplayRejectionInterrupts (server-rejection trigger): a
 // server `error` frame carrying the channel (a replay rejection) surfaces BOTH the
 // raw *ReplayError (carrying the code) and the recovery-level
 // *RecoveryInterruptedError.
@@ -103,7 +103,7 @@ func TestRecoveryReplayRejectionInterrupts(t *testing.T) {
 	}
 }
 
-// TestRecoveryEpochDeathInterruptsInFlightReplay (T139 — epoch-termination
+// TestRecoveryEpochDeathInterruptsInFlightReplay (epoch-termination
 // trigger): an ordinary epoch termination while a replay is in flight surfaces
 // *RecoveryInterruptedError{replay, t.a} — the truncated recovery is typed, never a
 // bare disconnect (spec §III) — while the channel still re-drives on the new epoch.
@@ -136,7 +136,7 @@ func TestRecoveryEpochDeathInterruptsInFlightReplay(t *testing.T) {
 		t.Errorf("Kind = %q, want %q", ri.Kind, RecoveryKindReplay)
 	}
 
-	// And recovery continues: the reconnect re-drives the replay on epoch 2 (T130).
+	// And recovery continues: the reconnect re-drives the replay on epoch 2.
 	fc.BlockUntilTimer(purposeBackoff)
 	fc.Advance(DefaultBackoff.Initial)
 	waitForDialCount(t, f, 2)

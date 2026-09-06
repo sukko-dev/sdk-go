@@ -64,7 +64,7 @@ func TestDefaultsMatchTheirConstants(t *testing.T) {
 	}
 }
 
-// TestZeroConfigIsValid is the SC-001 path: the quickstart sets no capacity or
+// TestZeroConfigIsValid is the zero-config quickstart path: the quickstart sets no capacity or
 // timing knob, so the defaults must satisfy the SDK's own validation. A default
 // its constructor rejects would make the documented example fail.
 func TestZeroConfigIsValid(t *testing.T) {

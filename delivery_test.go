@@ -41,7 +41,7 @@ func assertParked(t *testing.T, done <-chan discardReason) {
 	}
 }
 
-// TestReserveAdmission is T040 — the three admission rows that are Phase 3's
+// TestReserveAdmission — the three admission rows that are Phase 3's
 // exit criterion. At reserve-boundary occupancy (the data ceiling filled,
 // consumer stopped): a data send blocks, a safety-subset advisory succeeds into
 // the reserve, and an unbounded caller-driven advisory blocks rather than
@@ -103,7 +103,7 @@ func TestReserveAdmission(t *testing.T) {
 	})
 }
 
-// TestTerminalLandsWhenChannelFullOfSafety proves SC-014's structural guarantee:
+// TestTerminalLandsWhenChannelFullOfSafety proves the structural guarantee:
 // the *Terminal slot cannot be taken by any other producer, so a non-blocking
 // send lands even when the rest of the channel is full to the safety ceiling.
 func TestTerminalLandsWhenChannelFullOfSafety(t *testing.T) {
@@ -130,7 +130,7 @@ func TestTerminalLandsWhenChannelFullOfSafety(t *testing.T) {
 	}
 }
 
-// TestParkedSendDiscardDistinguishesContexts pins T037's requirement that the
+// TestParkedSendDiscardDistinguishesContexts pins the requirement that the
 // send reports which context discarded a parked event — the supervisor needs to
 // tell a root teardown from an epoch reconnect even though the event's fate is
 // the same.
@@ -253,7 +253,7 @@ func TestConcurrentAdmitDoesNotCorruptParkedEpisode(t *testing.T) {
 	<-doneB
 }
 
-// TestReceiveOrderIsSendOrder is T042: data and advisory events sent through the
+// TestReceiveOrderIsSendOrder: data and advisory events sent through the
 // one channel, by one sender, emerge in exact send order — the reservation
 // governs admission, never ordering.
 func TestReceiveOrderIsSendOrder(t *testing.T) {
@@ -352,7 +352,7 @@ func waitForChannelLen(t *testing.T, c *Client, want int) {
 	}
 }
 
-// TestAdvisoriesCannotStarveTerminal is T148 (NFR-005(mmm)): a stream of publish
+// TestAdvisoriesCannotStarveTerminal: a stream of publish
 // advisories (*PublishAccepted — a DATA-class event, capped at the data ceiling) can
 // never take the *Terminal's reserved slot. With the consumer stopped, the client is
 // fed N `publish_ack` frames and then closed; the final *Terminal is always delivered
@@ -442,7 +442,7 @@ func TestAdvisoriesCannotStarveTerminal(t *testing.T) {
 	}
 }
 
-// TestReserveAdmissionEndToEnd is T149 (NFR-005(y) end-to-end row): with the data
+// TestReserveAdmissionEndToEnd is the end-to-end admission row: with the data
 // region filled to its ceiling and the consumer stopped, safety-class events still
 // reach the caller through the reserve — the timer-driven *RecoveryInterruptedError
 // and then the supervisor's *Terminal are both admitted while data delivery is at the

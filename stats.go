@@ -10,7 +10,7 @@ import (
 // It is a plain value struct, deliberately: the internal counters are
 // atomic.Int64 (lock-free, off the hot path's critical section), but
 // sync/atomic.Int64 embeds a noCopy guard, so a struct of them cannot be
-// returned by value without a go vet copylocks failure — which FR-011's own CI
+// returned by value without a go vet copylocks failure — which the stats contract's own CI
 // gate would catch. Stats and the internal counters are therefore distinct
 // types, and Stats() copies field by field.
 //

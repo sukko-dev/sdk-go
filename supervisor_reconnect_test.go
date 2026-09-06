@@ -163,7 +163,7 @@ func TestClientReconnectAfterRemoteClose(t *testing.T) {
 	}
 }
 
-// TestClientHandshake429RetryAfter pins T072/T088: a 429 TENANT_LIMIT_EXCEEDED
+// TestClientHandshake429RetryAfter: a 429 TENANT_LIMIT_EXCEEDED
 // with a Retry-After header overrides the NEXT reconnect attempt's backoff delay
 // and takes ZERO Rand draws, while an absent header falls back to the pinned
 // formula (and its one draw). Discrimination is by how far the clock must advance
@@ -244,7 +244,7 @@ func waitForDialCount(t *testing.T, f *fakeWS, n int) {
 	}
 }
 
-// TestClientReconnectDisabledCleanStop pins T074's WithReconnect(false) downgrade
+// TestClientReconnectDisabledCleanStop pins the WithReconnect(false) downgrade
 // over a reconnect-class close: the SDK emits its *CloseError, then a final
 // *Terminal carrying the close cause, then closes — with no reconnect (dialCount
 // stays 1) and Err() NIL even though Terminal.Err is the cause. That divergence
@@ -300,7 +300,7 @@ func TestClientReconnectDisabledCleanStop(t *testing.T) {
 	}
 }
 
-// TestClientReconnectDialTimeout exercises the reconnect-dial watcher (T081 WS
+// TestClientReconnectDialTimeout exercises the reconnect-dial watcher (WS
 // leg): the first dial succeeds, the epoch closes 1011, and the reconnect dial
 // hangs. The injectable "dial" timer bounds it — advancing DialTimeout aborts the
 // dial, which classifies as a reconnect-class network failure, so the loop backs

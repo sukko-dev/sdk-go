@@ -46,8 +46,8 @@ type errorEnvelope struct {
 
 // RESTPublish publishes over HTTP and returns a genuine synchronous result — HTTP is
 // request/response, so unlike the fire-and-forget WebSocket Publish this call returns
-// the outcome (or a typed error) directly and never enqueues anything on Messages()
-// (FR-007). It needs no WebSocket connection; a closed client returns ErrClosed. The
+// the outcome (or a typed error) directly and never enqueues anything on
+// Messages(). It needs no WebSocket connection; a closed client returns ErrClosed. The
 // shared local pre-check (object, size, credential class) runs first, before any
 // network I/O, so a bad payload never reaches the gateway.
 //
@@ -156,7 +156,7 @@ func restBaseURL(wsURL string) (string, error) {
 	return u.String(), nil
 }
 
-// restPublishError maps a non-200 publish response to its typed error (FR-010). It keys
+// restPublishError maps a non-200 publish response to its typed error. It keys
 // on the body `code` so the two 403s (FORBIDDEN vs EDITION_LIMIT) are discriminated by
 // struct type. A body that is missing or unparseable still maps by HTTP status.
 func (c *Client) restPublishError(status int, body []byte, header http.Header) error {

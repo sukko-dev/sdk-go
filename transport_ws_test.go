@@ -190,7 +190,7 @@ func TestWSTransportHandshakeErrorAbsentRetryAfterIsNil(t *testing.T) {
 	}
 }
 
-// TestWSTransportReadLimitDerivedFromMaxPublishSize is T087: a message at the
+// TestWSTransportReadLimitDerivedFromMaxPublishSize: a message at the
 // configured payload size arrives intact rather than tripping the read limit and
 // closing with 1009. Proven both ways — one under the derived limit succeeds,
 // one over it fails.

@@ -88,7 +88,7 @@ func TestBlockedAccumulates(t *testing.T) {
 	}
 }
 
-// TestStatsScenarioCountersWithConcurrentReader is T150 (NFR-005(p), SC-012): the
+// TestStatsScenarioCountersWithConcurrentReader: the
 // deterministic counters bump under a real scenario, and Stats() read CONCURRENTLY
 // with delivery is -race-clean — every counter is an atomic, so a reader takes no
 // delivery lock and cannot block the decode goroutine. Epoch 1 dies with a remote

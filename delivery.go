@@ -6,7 +6,7 @@ import (
 	"time"
 )
 
-// The delivery channel and its classed reserve (FR-001a, ADR-0006).
+// The delivery channel and its classed reserve (ADR-0006).
 //
 // Messages() hands the caller this raw bounded channel, so the SDK has no hook
 // on receives and cannot keep a true occupancy count — only len(ch). Yet the
@@ -92,12 +92,12 @@ func (d *delivery) messages() <-chan Event { return d.ch }
 // race the close.
 func (d *delivery) close() { close(d.ch) }
 
-// safetySubset are the reserve-eligible event types (FR-001a). Each member's
+// safetySubset are the reserve-eligible event types. Each member's
 // per-epoch volume is bounded by SDK-owned state, not by caller or server
 // volume, which is what makes 15 slots ≥2× the worst-case demand.
 //
 // The classification is by construction — a pure function of the Go type — so it
-// cannot drift from the frame's content. It must stay in sync with FR-001a's
+// cannot drift from the frame's content. It must stay in sync with the
 // reserve membership; the delivery tests pin the discriminating cases.
 func isSafetyEvent(ev Event) bool {
 	switch ev.(type) {
@@ -114,7 +114,7 @@ func isSafetyEvent(ev Event) bool {
 //
 // *Terminal must NOT be sent through here — it has its own reserved slot and
 // non-blocking path (sendTerminal); routed here it would be classed as data and
-// could be discarded, defeating FR-009's guarantee.
+// could be discarded, defeating the every-terminal-path-emits-*Terminal guarantee.
 func (d *delivery) send(rootCtx, epochCtx context.Context, ev Event) discardReason {
 	ceiling := d.dataCeiling
 	if isSafetyEvent(ev) {
