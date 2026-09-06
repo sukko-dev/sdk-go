@@ -457,7 +457,7 @@ var sendRegistry = map[string]func() any{
 // before that layer exists, would duplicate the mapping's knowledge of which
 // fields each type requires. The real server always emits these fields, so
 // nothing is exposed in the meantime — but the deferral is recorded rather than
-// left implicit. Tracked as T024a in the Phase-3 task list.
+// left implicit. Tracked as a Phase-3 follow-up.
 func decodeFrame(data []byte) (decoded any, unknownType string, err error) {
 	var env envelope
 	if e := json.Unmarshal(data, &env); e != nil {

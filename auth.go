@@ -408,10 +408,10 @@ func (c *Client) runAuthOwner(ownerCtx context.Context) {
 	// ONLY here in the owner goroutine, so it shares the same tokenFailCount /
 	// lastFetchAt / ownerExpiry state as the connected refresh with no lock — the
 	// reason the fetch is a reply-chan request and not a direct supervisor call
-	// (ADR-0009, T107). Unlike the connected path it is NON-TERMINAL: a failure,
+	// (ADR-0009). Unlike the connected path it is NON-TERMINAL: a failure,
 	// even the 5th-or-later consecutive, is returned as the dial error and flows
 	// through classifyDial's non-HandshakeError fallthrough to a reconnect-class
-	// backoff — exactly FR-005 line 63, "never manufacture a terminal state" on
+	// backoff — the pinned auth rule, "never manufacture a terminal state" on
 	// the reconnect path. It does NOT gate on the RefreshMinInterval floor: the
 	// supervisor's backoff already paces reconnect dials and the first dial must
 	// fetch immediately. It only RECORDS lastFetchAt so a post-connect refresh
@@ -444,7 +444,7 @@ func (c *Client) runAuthOwner(ownerCtx context.Context) {
 			c.ownerSurface(ownerCtx, &TokenSourceError{Attempt: attempt, Cause: err})
 			return err
 		}
-		// Reset on ANY success (either context), matching FR-005's "a credential it
+		// Reset on ANY success (either context), matching the auth contract's "a credential it
 		// knows is dead" framing and the connected path: a successful dial fetch
 		// clears the strikes, so ADR-0009's "sit at Max across a reconnect then
 		// terminate on the next connected failure" is unreachable by construction —
@@ -679,7 +679,7 @@ func (c *Client) ownerSurface(ownerCtx context.Context, ev Event) {
 // the same mechanism the heartbeat timeout uses. The owner cannot call
 // terminalSequence or cancel root itself. Between epochs the reference is nil and
 // this no-ops; the reconnect path's fetch failures then carry the client
-// (non-terminal), which is spec-coherent (FR-005).
+// (non-terminal), which is spec-coherent.
 func (c *Client) terminateTokenSourceExhausted() {
 	ep := c.currentEpochRef()
 	if ep == nil {

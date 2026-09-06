@@ -37,7 +37,7 @@ func generateClientID() (string, error) {
 // across a send. The `pos` value is OPAQUE: stored and echoed verbatim, never parsed
 // and never compared (comparing two pos values would void the opacity the wire
 // contract depends on), which is why the cursor advances by receive order, never by
-// magnitude (FR-006).
+// magnitude.
 type posCursor struct {
 	mu  sync.Mutex
 	pos map[string]string // tenant-prefixed channel → opaque pos
@@ -61,7 +61,7 @@ func (p *posCursor) advance(channel, pos string) {
 }
 
 // seedIfAbsent records a history record's pos ONLY when the channel has no cursor
-// yet — the one narrow admission of a history pos (FR-006). It never overwrites a
+// yet — the one narrow admission of a history pos. It never overwrites a
 // live cursor (which is newer), so monotonicity holds without comparing pos values:
 // a seed cannot regress what does not exist. Called for SourceHistory only. Decode
 // goroutine only.
@@ -133,7 +133,7 @@ type bpAction struct {
 }
 
 // backpressureStep folds one reconnect-class epoch termination into the consecutive
-// back-pressure-reconnect count (T132). A slow-client close (countsTowardBackpressure
+// back-pressure-reconnect count. A slow-client close (countsTowardBackpressure
 // — the remote 1008) whose epoch actually backed up (backpressured) is a
 // back-pressure-induced reconnect: increment, and terminate at max. An epoch that did
 // NOT back up (backpressured false) means the consumer resumed draining → reset to
@@ -167,13 +167,13 @@ func backpressureStep(prev int, countsTowardBackpressure, backpressured bool, li
 //     the whole replay cycle; later gaps within the cycle mean "more loss", covered
 //     by replaying from the earlier anchor (the contract's conservative-anchor
 //     guarantee: may re-deliver, never misses). Coalescing is therefore by ARRIVAL
-//     ORDER, never magnitude (FR-006, T127/T141).
+//     ORDER, never magnitude.
 //
 //   - The server rejects a replay for a channel it does not have subscribed
 //     (handler_replay.go: "subscribe before replaying"). So a gap whose epoch died
 //     must NOT be replayed on the next epoch until that channel is re-granted there.
 //     Epoch-boundary re-drive is GRANT-triggered (handleGrant), never epoch-up-
-//     triggered (T130). Every send is epoch-gated: the FSM emits a replay only for
+//     triggered. Every send is epoch-gated: the FSM emits a replay only for
 //     the CURRENT epoch, and the owner sends it on that epoch's own bound conn.
 
 // recoveryPhase is a channel's position in the gap→replay cycle.
@@ -200,8 +200,8 @@ type recoveryChannel struct {
 	// anchor is the from_pos of the pending/active replay — the first un-recovered
 	// gap's last_pos. DIVERGENCE from sukko-py (which clears it at begin_replay): the
 	// anchor LIVES until its replay_complete, so a mid-REPLAYING epoch death can
-	// re-drive from it (T130/T142). A re-drive's from_pos is this anchor, NEVER the
-	// pos cursor (T142) — the cursor may have advanced past the gapped window on live
+	// re-drive from it. A re-drive's from_pos is this anchor, NEVER the
+	// pos cursor — the cursor may have advanced past the gapped window on live
 	// traffic, which would silently skip the lost records.
 	anchor string
 	// followup is the first gap seen while REPLAYING — the next cycle's anchor, begun
@@ -210,14 +210,14 @@ type recoveryChannel struct {
 	followup    string
 	hasFollowup bool
 	// lastReplayAt is the wall time of this channel's last replay send, for the
-	// floor. Zero = never. RESET (zeroed) with the epoch (T128): the server's replay
+	// floor. Zero = never. RESET (zeroed) with the epoch: the server's replay
 	// limiter is per-connection, so a fresh epoch opens the floor.
 	lastReplayAt time.Time
 	// floorWake is the absolute time a FLOOR_WAIT may fire.
 	floorWake time.Time
 	// deadline is the absolute time by which an in-flight replay (recReplaying) must
 	// terminate, or an awaiting-grant channel must be re-granted, before its recovery
-	// is declared interrupted (T129). Zero = no deadline armed — recIdle, and
+	// is declared interrupted. Zero = no deadline armed — recIdle, and
 	// recFloorWait (a floor-wait is bounded by floorWake, not the deadline). It fires
 	// ONLY after a full window has elapsed under a single live epoch with a healthy
 	// consumer: while disconnected, under a different epoch than it was armed under
@@ -424,7 +424,7 @@ func (f *recoveryFSM) handleReplayComplete(channel string, evEpoch *epoch, t tic
 }
 
 // handleGrant re-drives the retained replay for any of the granted channels that
-// were left awaiting a re-grant by an epoch death (T130). It fires only when the
+// were left awaiting a re-grant by an epoch death. It fires only when the
 // grant belongs to the current epoch — a stale grant is dropped, because the live
 // epoch's own resume-subscribe grant is guaranteed to re-trigger the re-drive.
 func (f *recoveryFSM) handleGrant(channels []string, evEpoch *epoch, t tick) []replayAction {
@@ -464,11 +464,11 @@ func (f *recoveryFSM) handleReplayFailure(channel string) []string {
 // handleReset applies an epoch boundary. A channel with a replay IN FLIGHT
 // (recReplaying) is a truncated recovery: its channel is returned as an interrupt
 // (a *RecoveryInterruptedError, spec §III) AND its anchor is retained for a
-// grant-triggered re-drive on the new epoch (T130) — the interrupt is the notice,
+// grant-triggered re-drive on the new epoch — the interrupt is the notice,
 // the re-drive is the retry. A FLOOR_WAIT channel has no replay in flight, so it
 // re-drives WITHOUT an interrupt. Every mid-cycle channel enters awaiting-grant with
 // a fresh deadline (re-armed each boundary); the per-channel floor resets with the
-// epoch (T128). Admitted through the same inbox as the decode events (both are the
+// epoch. Admitted through the same inbox as the decode events (both are the
 // supervisor goroutine), so the stream is totally ordered and a reset applies to
 // exactly the epoch that just died.
 func (f *recoveryFSM) handleReset(t tick) []string {
@@ -587,7 +587,7 @@ func (f *recoveryFSM) nextWake() (time.Time, timerPurpose, bool) {
 
 // applyRecovery resolves a message-class event's final Source and updates the pos
 // cursor, on the decode goroutine (the cursor's sole writer). Order is load-bearing
-// (FR-006): the reconnect-replay window override is applied to Source FIRST, then
+// — the reconnect-replay window override is applied to Source FIRST, then
 // the cursor is keyed on the FINAL Source — so a live-shaped record replayed inside
 // the window is retagged SourceReplay and therefore does NOT advance the cursor
 // (its older pos would regress it). A live record advances; a history record seeds

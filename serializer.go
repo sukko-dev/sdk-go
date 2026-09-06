@@ -17,7 +17,7 @@ import (
 // not-granted event and the escalation delta, so mis-attribution would fabricate
 // or discard denials. The serializer therefore keeps at most ONE subscribe/
 // unsubscribe outstanding at a time; callers still call concurrently and the SDK
-// does the serializing (FR-001a).
+// does the serializing.
 //
 // The serializer owns the queue (subReqCh), the desired set, the wire sends, and
 // the one-outstanding slot (subFlight). The DECODE loop — not the serializer —
@@ -92,7 +92,7 @@ func (s *subFlight) snapshot() (active bool, kind subReqKind, channels []string,
 // (desired) and the decode loop (granted) mutate them. desired is the caller's
 // wanted set (changed only by Subscribe/Unsubscribe); granted is the
 // currently-subscribed subset (cleared at every epoch boundary, repopulated by
-// acks). PendingSubscriptions = desired − granted (FR-001a).
+// acks). PendingSubscriptions = desired − granted.
 type subState struct {
 	mu      sync.Mutex
 	desired map[string]struct{}
@@ -145,7 +145,7 @@ func (s *subState) pruneGranted(channels []string) {
 }
 
 // remove prunes channels from BOTH the desired and granted sets (Unsubscribe's
-// both-set pruning, FR-001a) and returns the subset that was granted — the only
+// both-set pruning) and returns the subset that was granted — the only
 // channels a wire `unsubscribe` frame need cover. Serializer only.
 func (s *subState) remove(channels []string) (wasGranted []string) {
 	s.mu.Lock()
@@ -195,7 +195,7 @@ func (c *Client) runSubscribeSerializer(ownerCtx context.Context) {
 
 	// ackTimer bounds how long the one outstanding request waits for its ack, so a
 	// withheld ack never strands the queue. AckTimeout tracks the CONFIGURED
-	// RecoveryDeadline (read at arm time), not the constant default (FR-001a).
+	// RecoveryDeadline (read at arm time), not the constant default.
 	var ackTimer Timer
 	var ackC <-chan time.Time
 	disarmAck := func() {
@@ -338,7 +338,7 @@ func (c *Client) runSubscribeSerializer(ownerCtx context.Context) {
 	for {
 		serviceResume()
 		// Accept a new request only when idle — leave requests buffered in subReqCh
-		// while one is outstanding (single-outstanding, FR-001a).
+		// while one is outstanding (single-outstanding).
 		var reqCh <-chan subReq
 		if !c.subFlight.isActive() {
 			reqCh = c.subReqCh

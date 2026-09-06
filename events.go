@@ -6,14 +6,14 @@ import "encoding/json"
 //
 // It is an interface with an unexported marker method, so the member set is
 // closed to this package: a caller's `switch ev := ev.(type)` runs against a
-// known roster (FR-001a's dispatch table), and no external type can join it. The
+// known roster (the dispatch table), and no external type can join it. The
 // dominant member is *Message; everything else is an advisory or lifecycle
 // signal that flows in-band, in receive order, on the same channel — so a
 // *PossibleGap arrives exactly where the potential loss sits relative to the
 // data, rather than on a second channel whose overflow policy could drop the
 // very signals that exist to prevent silent drops.
 //
-// Several members are also errors (the typed structs of FR-010): one
+// Several members are also errors (the typed error roster): one
 // `case *ReplayError:` yields a value errors.As matches, with no parallel
 // wrapper hierarchy.
 type Event interface {
@@ -175,7 +175,7 @@ func (*ReplayComplete) isEvent() {}
 
 // ─── connection lifecycle ───
 
-// StateChange reports a connection-state transition, per FR-009's state machine.
+// StateChange reports a connection-state transition, per the connection state machine.
 type StateChange struct {
 	From ConnectionState
 	To   ConnectionState
@@ -213,7 +213,7 @@ func (*UnknownEvent) isEvent() {}
 
 // ─── error-shaped members ───
 //
-// These are the typed error structs of FR-010, defined in errors.go. Adding the
+// These are the typed error structs of the error roster, defined in errors.go. Adding the
 // marker here — rather than beside each struct — keeps the union's membership
 // legible in one place: this file is the roster, errors.go is the error
 // behavior. Each still implements error there.

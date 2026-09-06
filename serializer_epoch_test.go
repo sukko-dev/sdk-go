@@ -23,7 +23,7 @@ func subscribeFrameChannels(t *testing.T, fr recordedFrame) []string {
 }
 
 // TestSubscribeResumesDesiredOnReconnect covers the reconnect resume and the
-// epoch-boundary accessors (T120): after the epoch dies Subscriptions() is empty
+// epoch-boundary accessors: after the epoch dies Subscriptions() is empty
 // and PendingSubscriptions() holds the whole desired set (granted was cleared);
 // after the resume ack on the next epoch Subscriptions() is the re-granted set and
 // PendingSubscriptions() the retained denial subset. The resume frame carries the
@@ -176,7 +176,7 @@ func TestSubscribeResumesAfterIdleEpochReconnect(t *testing.T) {
 	waitForCond(t, "t.a re-granted on E2", func() bool { return sortedEqual(c.Subscriptions(), []string{"t.a"}) })
 }
 
-// TestSubscribeInFlightRedrivenExactlyOnceOnReconnect covers T119's epoch-mid-flight
+// TestSubscribeInFlightRedrivenExactlyOnceOnReconnect covers the epoch-mid-flight
 // leg: a subscribe that was outstanding when the epoch died is re-driven EXACTLY
 // once on the next epoch — asserted by the frame count (one per epoch, never twice
 // on the reconnect).
@@ -218,7 +218,7 @@ func TestSubscribeInFlightRedrivenExactlyOnceOnReconnect(t *testing.T) {
 	}
 }
 
-// TestEscalateResubscribesDenialSubsetOnly covers T120's escalation leg and T121's
+// TestEscalateResubscribesDenialSubsetOnly covers the escalation leg and the
 // escalation-excludes-pruned leg: after a partial grant, an Escalate re-subscribes
 // the DENIAL SUBSET ONLY (not the already-granted channels), and a denied channel
 // the caller has since Unsubscribed is NOT in the escalation re-subscribe.
@@ -261,7 +261,7 @@ func TestEscalateResubscribesDenialSubsetOnly(t *testing.T) {
 	}
 }
 
-// TestForcedUnsubscribeMovesChannelToPending covers T122's downgrade leg and the
+// TestForcedUnsubscribeMovesChannelToPending covers the downgrade leg and the
 // forced-unsubscribe granted-prune: a server-forced unsubscription_ack{forced:true}
 // prunes the granted set ONLY (keeping desired), so the channel leaves
 // Subscriptions() and reappears in PendingSubscriptions(); it does not release the

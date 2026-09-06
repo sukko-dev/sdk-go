@@ -88,7 +88,7 @@ type Client struct {
 	// loses nothing.
 	recoveryPoke chan struct{}
 	// historyFlight is the client-level single-flight slot for History() — one history
-	// outstanding at a time (FR-001b). Claimed by the caller, released (channel-matched)
+	// outstanding at a time. Claimed by the caller, released (channel-matched)
 	// by the decode loop on a terminator, and interrupted by the recovery owner on the
 	// deadline or an epoch death. A leaf lock, never held across a send.
 	historyFlight historyFlight
@@ -386,7 +386,7 @@ func (c *Client) Iter(ctx context.Context) iter.Seq[Event] {
 // other state (ADR-0011), because queuing a send for the reconnect would be
 // redundant: the reconnect's dial re-authenticates via the per-dial credential
 // read. The offline path is UpdateToken (store) + reconnect. On a live socket it
-// is fire-and-forget (FR-001b) and single-flight — concurrent calls coalesce into
+// is fire-and-forget and single-flight — concurrent calls coalesce into
 // one in-flight refresh. It returns ErrClosed once the client is closed.
 func (c *Client) RefreshToken(ctx context.Context) error {
 	if err := ctx.Err(); err != nil {
@@ -417,7 +417,7 @@ func (c *Client) RefreshToken(ctx context.Context) error {
 // is UpdateToken(jwt) + reconnect. An empty JWT is rejected. On a successful ack
 // the JWT is committed to the credential store (flipping the client's class to
 // "has JWT"); a rejected escalation leaves the store unchanged. It is
-// fire-and-forget (FR-001b) and single-flight (latest JWT wins). An escalation
+// fire-and-forget and single-flight (latest JWT wins). An escalation
 // accepted on a live socket that then drops before its ack is re-sent on the
 // reconnect rather than lost.
 func (c *Client) Escalate(ctx context.Context, jwt string) error {
@@ -477,7 +477,7 @@ func (c *Client) UpdateToken(token string) error {
 
 // Subscribe requests delivery of the given channels. Subscription is STATE, not an
 // action: the request is enqueued on the serializer and Subscribe returns as soon
-// as it is accepted — it is fire-and-forget (FR-001b), never awaits an ack, and is
+// as it is accepted — it is fire-and-forget, never awaits an ack, and is
 // accepted in any non-closed state (a request made while disconnected updates the
 // desired set and is flushed on the next connect). A full serializer queue yields
 // ErrSubscribeQueueFull; a closed client returns ErrClosed. The grant outcome
@@ -521,7 +521,7 @@ func (c *Client) enqueueSubReq(ctx context.Context, op string, req subReq) error
 // receiving — as full tenant-prefixed strings.
 func (c *Client) Subscriptions() []string { return c.subs.grantedSnapshot() }
 
-// PendingSubscriptions returns the requested-but-not-yet-granted set (FR-001a):
+// PendingSubscriptions returns the requested-but-not-yet-granted set:
 // channels a Subscribe asked for that are not (yet) granted — covering both a
 // Subscribe issued while disconnected and the post-ack denial delta.
 func (c *Client) PendingSubscriptions() []string { return c.subs.pendingSnapshot() }

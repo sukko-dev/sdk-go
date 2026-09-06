@@ -54,7 +54,7 @@ func TestRecoveryFSMGapReplaysImmediatelyWhenFloorOpen(t *testing.T) {
 
 // TestRecoveryFSMGapWaitsWhenFloorClosed: a gap arriving within the floor of a
 // prior replay does NOT send immediately — it enters FLOOR_WAIT — and due() fires
-// exactly one replay once the floor elapses, from the gap's anchor (T128/T137).
+// exactly one replay once the floor elapses, from the gap's anchor.
 func TestRecoveryFSMGapWaitsWhenFloorClosed(t *testing.T) {
 	f := newTestFSM()
 	e := &epoch{}
@@ -80,7 +80,7 @@ func TestRecoveryFSMGapWaitsWhenFloorClosed(t *testing.T) {
 }
 
 // TestRecoveryFSMCoalescesInFloorWait: multiple gaps arriving during FLOOR_WAIT
-// coalesce to ONE replay from the FIRST-arrived anchor (T127).
+// coalesce to ONE replay from the FIRST-arrived anchor.
 func TestRecoveryFSMCoalescesInFloorWait(t *testing.T) {
 	f := newTestFSM()
 	e := &epoch{}
@@ -99,7 +99,7 @@ func TestRecoveryFSMCoalescesInFloorWait(t *testing.T) {
 
 // TestRecoveryFSMCoalescingIgnoresPosOrder: gaps whose anchor values' order
 // disagrees with arrival order still coalesce to the first-ARRIVED anchor, proving
-// no pos comparison is performed (T141).
+// no pos comparison is performed.
 func TestRecoveryFSMCoalescingIgnoresPosOrder(t *testing.T) {
 	f := newTestFSM()
 	e := &epoch{}
@@ -117,7 +117,7 @@ func TestRecoveryFSMCoalescingIgnoresPosOrder(t *testing.T) {
 
 // TestRecoveryFSMFollowupAfterReplayComplete: a gap arriving mid-replay is
 // retained as the follow-up anchor and drives one replay after replay_complete
-// (floor permitting) (T137).
+// (floor permitting).
 func TestRecoveryFSMFollowupAfterReplayComplete(t *testing.T) {
 	f := newTestFSM()
 	e := &epoch{}
@@ -169,8 +169,8 @@ func TestRecoveryFSMStaleReplayCompleteIgnored(t *testing.T) {
 
 // TestRecoveryFSMRedriveOnGrantAfterEpochDeath: a replay in flight when the epoch
 // dies is retained (anchor kept, awaiting grant) and re-driven from that SAME
-// anchor when the channel is re-granted on the new epoch — never from the cursor
-// (T130/T142). The re-drive is grant-triggered, not reset-triggered.
+// anchor when the channel is re-granted on the new epoch — never from the
+// cursor. The re-drive is grant-triggered, not reset-triggered.
 func TestRecoveryFSMRedriveOnGrantAfterEpochDeath(t *testing.T) {
 	f := newTestFSM()
 	e1 := &epoch{}
@@ -197,7 +197,7 @@ func TestRecoveryFSMRedriveOnGrantAfterEpochDeath(t *testing.T) {
 
 // TestRecoveryFSMFloorResetsWithEpoch: the per-channel floor is reset by an epoch
 // boundary, so a re-drive on the new epoch is not throttled by the old epoch's
-// replay time (T128/T142).
+// replay time.
 func TestRecoveryFSMFloorResetsWithEpoch(t *testing.T) {
 	f := newTestFSM()
 	e1 := &epoch{}
@@ -219,7 +219,7 @@ func TestRecoveryFSMFloorResetsWithEpoch(t *testing.T) {
 // TestRecoveryFSMFollowupCollapsesOnReset: a REPLAYING channel holding a follow-up
 // gap when the epoch dies re-drives ONLY the head anchor on the next grant — the
 // follow-up collapses into it (one frame per channel), since replaying from the
-// earlier anchor covers the later gap (T130).
+// earlier anchor covers the later gap.
 func TestRecoveryFSMFollowupCollapsesOnReset(t *testing.T) {
 	f := newTestFSM()
 	e1 := &epoch{}
@@ -327,7 +327,7 @@ func TestRecoveryFSMDueForeignEpochParks(t *testing.T) {
 
 // TestRecoveryFSMDeadlineInterruptsStuckReplay: an in-flight replay whose
 // replay_complete never arrives is declared interrupted once the recovery deadline
-// elapses, and the channel is reset to idle with its anchor dropped (T129).
+// elapses, and the channel is reset to idle with its anchor dropped.
 func TestRecoveryFSMDeadlineInterruptsStuckReplay(t *testing.T) {
 	f := newRecoveryFSM(10*time.Second, 30*time.Second)
 	e := &epoch{}
@@ -398,7 +398,7 @@ func TestRecoveryFSMReplayFailureInterruptsExactlyOnce(t *testing.T) {
 // TestRecoveryFSMResetInterruptsOnlyInFlightReplays: an epoch boundary interrupts a
 // channel with a replay IN FLIGHT (REPLAYING), but NOT one merely floor-waiting
 // (nothing in flight) — while both retain their anchors and re-drive on the next
-// grant (interrupt-and-re-drive, spec §III + T130).
+// grant (interrupt-and-re-drive).
 func TestRecoveryFSMResetInterruptsOnlyInFlightReplays(t *testing.T) {
 	f := newRecoveryFSM(10*time.Second, 30*time.Second)
 	e := &epoch{}

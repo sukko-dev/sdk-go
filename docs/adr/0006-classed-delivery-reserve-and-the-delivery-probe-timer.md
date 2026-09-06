@@ -28,7 +28,7 @@ The channel send is never performed under the mutex (§VII). Soundness rests on 
 
 ## Consequences
 
-- The `*Terminal`-on-every-terminal-path guarantee (SC-014) becomes provable: a unit test fills the channel to a safety ceiling with all senders quiescent and asserts the non-blocking `*Terminal` send lands.
+- The `*Terminal`-on-every-terminal-path guarantee becomes provable: a unit test fills the channel to a safety ceiling with all senders quiescent and asserts the non-blocking `*Terminal` send lands.
 - The admission-matrix tests are deterministic under the fake clock: with the probe timer unadvanced, an over-ceiling send stays parked, so "data blocks / safety succeeds / unbounded-advisory blocks" at reserve-boundary occupancy is a stable assertion rather than a race.
 - Resume latency under sustained back-pressure is bounded by the probe interval, not by instantaneous drain detection. This is a real, accepted cost, paid only while a consumer is already behind.
 - `class(ev)` is a pure function of the event's Go type — admission by construction. It must stay in sync with the reserve membership above; a completeness test pins the safety subset against that list.

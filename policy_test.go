@@ -2,8 +2,8 @@ package sukko
 
 import "testing"
 
-// The four policy tables in policy.go are the single source that NFR-005(kk)
-// (termination classification) and NFR-005(ggg) (the *StateChange matrix) are
+// The four policy tables in policy.go are the single source that the termination-
+// classification and *StateChange matrices are
 // generated from. These tests pin the tables themselves: every row the spec
 // enumerates resolves to the class the spec assigns, lookups are total, and the
 // enumerations stay closed. If a table and its matrix could drift, the matrix
@@ -214,8 +214,8 @@ func TestInternalCausePolicy(t *testing.T) {
 	}
 }
 
-// TestStateTransitions pins FR-009's entry/exit table, which this structure
-// transcribes. NFR-005(ggg) generates the *StateChange matrix from it.
+// TestStateTransitions pins the state machine's entry/exit table, which this structure
+// transcribes. The *StateChange matrix is generated from it.
 func TestStateTransitions(t *testing.T) {
 	t.Parallel()
 

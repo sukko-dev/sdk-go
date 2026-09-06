@@ -21,7 +21,7 @@ func replayPayloadOf(t *testing.T, fr recordedFrame) replayPayload {
 	return w.Data
 }
 
-// TestGapDrivesReplay is the basic wire path (T127): a server gap advisory on a
+// TestGapDrivesReplay is the basic wire path: a server gap advisory on a
 // subscribed channel, with the floor open, drives exactly one replay{from_pos =
 // the gap's last_pos}, and bumps the gaps/replays counters.
 func TestGapDrivesReplay(t *testing.T) {
@@ -54,7 +54,7 @@ func TestGapDrivesReplay(t *testing.T) {
 }
 
 // TestFollowupReplayFiresAfterFloor drives the follow-up path end-to-end through
-// the real replay-floor timer (T128/T137): a gap while REPLAYING is retained, and
+// the real replay-floor timer: a gap while REPLAYING is retained, and
 // its replay fires only once the per-channel floor elapses — proving the owner's
 // single floor timer (purposeReplayFloor) drives the deferred replay, and that the
 // retained anchor is the first-arrived follow-up, not a later one.
@@ -97,7 +97,7 @@ func TestFollowupReplayFiresAfterFloor(t *testing.T) {
 	}
 }
 
-// TestReplayRedrivenAcrossReconnect is the core re-drive test (T130): a replay in
+// TestReplayRedrivenAcrossReconnect is the core re-drive test: a replay in
 // flight when the epoch dies is re-driven on the new epoch — but only AFTER the
 // resume subscribe re-grants the channel (the server rejects a replay for an
 // unsubscribed channel), and from the SAME anchor. It asserts the re-driven replay
@@ -151,7 +151,7 @@ func TestReplayRedrivenAcrossReconnect(t *testing.T) {
 	}
 }
 
-// TestRedriveUsesAnchorNotCursor is the discriminating test for T142: between the
+// TestRedriveUsesAnchorNotCursor is the anchor-vs-cursor discriminating test: between the
 // gap and the epoch death, live traffic advances the pos cursor past the gapped
 // window. On reconnect the RECONNECT frame carries the (advanced) cursor, but the
 // re-driven REPLAY must carry the gap's own anchor — never the cursor, which would

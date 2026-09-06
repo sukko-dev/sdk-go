@@ -130,7 +130,7 @@ func (c *Client) run(connectCtx context.Context) {
 	// 1008 whose epoch actually experienced back-pressure). It increments on such a
 	// reconnect, freezes on any other reconnect cause, and resets to zero when an epoch
 	// runs without back-pressure (the consumer resumed draining). At
-	// maxBackpressureReconnects it terminates with ErrConsumerTooSlow (FR-006/FR-010).
+	// maxBackpressureReconnects it terminates with ErrConsumerTooSlow.
 	bpReconnects := 0
 	// episodesAtUp is delivery.parkEpisodes() snapshotted at each handshake, so a park
 	// episode DURING the epoch is a race-free witness that a send parked (the channel
@@ -167,7 +167,7 @@ func (c *Client) run(connectCtx context.Context) {
 
 		if dialErr != nil {
 			if wasFirst {
-				// Connect returns the first dial's failure (FR-001); reconnect (when
+				// Connect returns the first dial's failure; reconnect (when
 				// enabled) still proceeds in the background below.
 				c.firstDial <- dialErr
 				firstDialReported = true
@@ -193,7 +193,7 @@ func (c *Client) run(connectCtx context.Context) {
 		// replayed records are tagged SourceReplay. This is sent on the LOCAL conn
 		// BEFORE setConn publishes it to currentConn() — the serializer's and
 		// auth-owner's send gate — so reconnect provably LEADS the resume subscribe and
-		// any auth frame on the wire (FR-006); setConn-first would let a resume that was
+		// any auth frame on the wire; setConn-first would let a resume that was
 		// pending from a prior epoch race ahead of it. The window is ASSIGNED every
 		// epoch-up (open iff a reconnect was sent), never toggled, so a mid-window
 		// death cannot leak an open window into an epoch that sends no reconnect. It is
@@ -221,7 +221,7 @@ func (c *Client) run(connectCtx context.Context) {
 		c.transition(triggerHandshakeOK) // connecting/reconnecting → connected
 		if hadEpoch {
 			// A prior epoch ran, so this successful handshake re-established the
-			// connection — a reconnect (FR-006). Counted here, past the clean-stop check
+			// connection — a reconnect. Counted here, past the clean-stop check
 			// above, so a Close landing as the dial completes is not miscounted; gated on
 			// hadEpoch to match the reconnect-frame gate, so a first connection after a
 			// failed first dial (hadEpoch still false) is not a reconnect.
@@ -230,7 +230,7 @@ func (c *Client) run(connectCtx context.Context) {
 		if wasFirst {
 			// Report the first dial's SUCCESS only after the state is Connected, so a
 			// caller whose Connect returns nil can immediately RefreshToken/Escalate
-			// without racing the →connected transition (FR-001).
+			// without racing the →connected transition.
 			c.firstDial <- nil
 			firstDialReported = true
 		}
@@ -238,7 +238,7 @@ func (c *Client) run(connectCtx context.Context) {
 		// while disconnected (a proactive timer that fired during backoff).
 		c.upAuthOwner()
 		// Re-subscribe the desired set on the new epoch: the reset cleared granted,
-		// so the resume covers the whole desired set (FR-001a). Sent after upAuthOwner
+		// so the resume covers the whole desired set. Sent after upAuthOwner
 		// so auth (if any) leads, though the serializer and auth-owner are independent.
 		c.resumeSubscribeSerializer()
 
@@ -253,12 +253,12 @@ func (c *Client) run(connectCtx context.Context) {
 		// The epoch ended. Clear the live-conn reference so the auth-owner's
 		// conn-nil guard actually holds between epochs — otherwise it would fetch a
 		// TokenSource and send on a dead socket while reconnecting, burning
-		// connected-path strikes during a backoff FR-005 says is non-terminal.
+		// connected-path strikes during a backoff the auth contract says is non-terminal.
 		c.setConn(nil)
 		// Tell the auth-owner to abandon any refresh outstanding on this now-dead
 		// connection (its answer will never arrive).
 		c.resetAuthOwner()
-		// Snapshot the *PossibleGap set (T131): the channels GRANTED in the epoch that
+		// Snapshot the *PossibleGap set: the channels GRANTED in the epoch that
 		// just ended which hold no pos cursor gapped across the disconnect — the
 		// reconnect{last_pos} can carry no anchor for them — so union them into the
 		// pending set, to be emitted as one coalesced *PossibleGap when the reconnect
@@ -279,7 +279,7 @@ func (c *Client) run(connectCtx context.Context) {
 		// ordered after every gap/replay_complete/grant of the epoch that just died and
 		// before any event of the next one. Channels mid-recovery move to awaiting-grant
 		// (re-driven on the new epoch's resume grant), and the per-channel replay floor
-		// resets with the epoch (T128).
+		// resets with the epoch.
 		c.resetRecoveryOwner()
 		// Discriminate on cause, not outcome (as the dial path does): if Close or a
 		// lifetime cancel raced the epoch's end — even if the heartbeat or a panic
@@ -290,7 +290,7 @@ func (c *Client) run(connectCtx context.Context) {
 			c.transition(c.stopTrigger())
 			return
 		}
-		// Back-pressure reconnect counting (T132), AFTER the clean-stop discriminator
+		// Back-pressure reconnect counting, AFTER the clean-stop discriminator
 		// (a Close racing the 1008 is a clean stop, never ErrConsumerTooSlow) and BEFORE
 		// applyOutcome. A slow-client 1008 whose epoch actually backed up
 		// (out.countsTowardBackpressure + a park episode since the handshake, or a send
@@ -345,7 +345,7 @@ func (c *Client) acquireConn(connectCtx context.Context, first bool) (Conn, erro
 	// reply chan and the fetched token reaches the handshake via the store the
 	// transport reads per dial. A fetch failure becomes the dial error, which
 	// classifyDial's non-HandshakeError fallthrough makes reconnect-class —
-	// non-terminal forever (FR-005 line 63), never a doomed handshake. Static
+	// non-terminal forever (never a manufactured terminal state), never a doomed handshake. Static
 	// clients keep the untouched store-read path.
 	if c.cfg.tokenSource != nil {
 		waitCtx := c.rootCtx
@@ -677,7 +677,7 @@ func (c *Client) dispatch(e *epoch, data []byte) {
 	decoded, unknown, err := decodeFrame(data)
 	if err != nil {
 		// Unreadable frame. Surfaced as a protocol error so drift is visible;
-		// the epoch-tear-on-non-JSON refinement (FR-002 liveness) is a later task.
+		// the epoch-tear-on-non-JSON liveness refinement is a later task.
 		c.forward(e.ctx, &ProtocolError{Message: "unreadable frame", Cause: err})
 		return
 	}
@@ -726,7 +726,7 @@ func (c *Client) dispatch(e *epoch, data []byte) {
 			c.pokeSubscribeSerializer(g)
 			// Hand the granted channels to the recovery owner: on a reconnect the resume
 			// subscribe re-grants the desired set, which is the trigger to re-drive any
-			// replay retained across the epoch boundary (T130). A grant with no retained
+			// replay retained across the epoch boundary. A grant with no retained
 			// recovery is a cheap no-op.
 			c.admitGrant(e, f.Subscribed)
 		}
@@ -765,7 +765,7 @@ func (c *Client) dispatch(e *epoch, data []byte) {
 		c.replayWin.close()
 	case *wireGap:
 		// A server gap advisory. Count every one received, and hand a well-formed gap
-		// to the recovery owner to drive a live gap→replay (T127/T128). An empty
+		// to the recovery owner to drive a live gap→replay. An empty
 		// last_pos is un-anchorable — it drives no replay; it surfaces *Gap and, in the
 		// post-surface block below, an immediate per-channel *PossibleGap. Falls through
 		// to surface *Gap in receive order.
@@ -810,7 +810,7 @@ func (c *Client) dispatch(e *epoch, data []byte) {
 		// Recovery post-processing on the decode goroutine: for a message-class event,
 		// resolve the final Source (reconnect-replay window override) and update the
 		// pos cursor — Source FIRST, then the cursor keyed on it, so a replayed record
-		// never advances the cursor (FR-006).
+		// never advances the cursor.
 		if m, ok := ev.(*Message); ok {
 			c.applyRecovery(m)
 		}
@@ -908,7 +908,7 @@ func (c *Client) terminalSequence() {
 		if conn != nil {
 			_ = conn.Close(closeCodeNormalClosure, "") // best-effort; may already be closed
 		}
-		// Emit any still-pending *PossibleGap BEFORE the final *Terminal (T131): a client
+		// Emit any still-pending *PossibleGap BEFORE the final *Terminal: a client
 		// that dies still holding a cursorless-granted snapshot (it never reconnected to
 		// drain it) surfaces the loss here. The non-blocking reserve send cannot hang Close.
 		//

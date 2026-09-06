@@ -7,7 +7,7 @@ import (
 	"testing"
 )
 
-// TestPublishSendsFrame is the WS publish happy path (T066): a connected client
+// TestPublishSendsFrame is the WS publish happy path: a connected client
 // Publishes a JSON object and the `publish` frame reaches the socket carrying the
 // channel and the caller's payload nested under the contract's inner `data`.
 func TestPublishSendsFrame(t *testing.T) {
@@ -33,7 +33,7 @@ func TestPublishSendsFrame(t *testing.T) {
 }
 
 // TestPublishRejectsBeforeSend covers the reject side of the payload pre-check
-// (T066/T158 WS leg): a non-object payload and an oversize payload each return the
+// (WS leg): a non-object payload and an oversize payload each return the
 // typed error BEFORE any byte reaches the socket — the fake records zero publish frames.
 func TestPublishRejectsBeforeSend(t *testing.T) {
 	// map[string]any{"d": s} marshals to `{"d":"<s>"}` == 8 + len(s) bytes, so one byte
@@ -86,7 +86,7 @@ func TestPrepublishCheckSizeBoundary(t *testing.T) {
 	}
 }
 
-// TestPublishRequiresJWT is the credential-class pre-check (T066/T106 WS leg): an
+// TestPublishRequiresJWT is the credential-class pre-check (WS leg): an
 // API-key-only client cannot publish (publish requires a JWT) and no frame is sent,
 // while a WithNoAuth client (auth-disabled deployment) publishes freely.
 func TestPublishRequiresJWT(t *testing.T) {

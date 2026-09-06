@@ -11,7 +11,7 @@ import (
 // wire value: PushPlatform mirrors the gateway's closed push-subscribe enum and
 // HistorySource mirrors `history_complete.source`. Pinning the underlying string
 // (not just String()) is what keeps encoding correct — see TestEnumJSONRoundTrip.
-// ConnectionState's six values are asserted verbatim per NFR-005(oo), including
+// ConnectionState's six values are asserted verbatim, including
 // StateClosed == "closed".
 func TestEnumWireValues(t *testing.T) {
 	t.Parallel()

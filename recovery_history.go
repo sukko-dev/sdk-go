@@ -9,7 +9,7 @@ import (
 // The History single-flight (Slice 3b). History() requests up to `limit` historical
 // records for a channel; they arrive as SourceHistory *Message events terminated by
 // history_complete (or history_error). Only ONE history may be outstanding per
-// client (FR-001b): N concurrent histories would put N×HistoryLimit records on the
+// client: N concurrent histories would put N×HistoryLimit records on the
 // bounded delivery channel. That single-flight is enforced by historyFlight, a
 // leaf-lock slot shared by three parties — the CALLER (claim, and identity-matched
 // releaseIf on a send failure), the DECODE loop (channel-matched release on a

@@ -5,7 +5,7 @@ import (
 	"time"
 )
 
-// computeBackoffDelay implements the pinned reconnect-backoff formula (FR-006):
+// computeBackoffDelay implements the pinned reconnect-backoff formula:
 //
 //	base  = min(Initial × Multiplier^attempt, Max)
 //	delay = base × (1 + Jitter × (2r − 1))    clamped to [0, Max]

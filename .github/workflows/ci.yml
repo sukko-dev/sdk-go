@@ -62,7 +62,7 @@ jobs:
   # Opt-in live-compose smoke — build-tagged integration tests, run only on manual dispatch.
   # The harness boots the stack with an Enterprise license (cumulative: covers the Pro-gated
   # publish/SSE and Enterprise-gated push suites) and MESSAGE_BACKEND=kafka (the replay leg needs
-  # pos-recovery, which the Direct backend cannot exercise). See specs NFR-005. The compose boot
+  # pos-recovery, which the Direct backend cannot exercise). The compose boot
   # and the `integration`-tagged tests land with the implementation.
   integration:
     name: live-compose smoke (opt-in)

@@ -8,13 +8,13 @@ import (
 
 // TestEveryWireTypeHasADisposition is the completeness guard for the mapping,
 // the decode-side twin of Phase 2's registry-coverage test: every server type
-// the SDK decodes must resolve to exactly one disposition in FR-001a's table, so
+// the SDK decodes must resolve to exactly one disposition in the dispatch table, so
 // a new decodable type cannot be added without deciding how it reaches the
 // caller.
 func TestEveryWireTypeHasADisposition(t *testing.T) {
 	for wireType := range decodeRegistry {
 		if _, ok := dispositionTable[wireType]; !ok {
-			t.Errorf("decodable type %q has no disposition — FR-001a's table must place it", wireType)
+			t.Errorf("decodable type %q has no disposition — the dispatch table must place it", wireType)
 		}
 	}
 	for wireType := range dispositionTable {
@@ -25,7 +25,7 @@ func TestEveryWireTypeHasADisposition(t *testing.T) {
 }
 
 // TestSurfaceEventMapsGoldenFixtures decodes every "surface" golden fixture and
-// asserts it maps to the concrete Event type FR-001a's table prescribes.
+// asserts it maps to the concrete Event type the dispatch table prescribes.
 //
 // It runs off the same contract-derived fixtures as Phase 2, so the mapping is
 // checked against the server's own frame shapes, not against hand-built inputs.
@@ -128,10 +128,10 @@ func TestMessageSourceFromFrame(t *testing.T) {
 	}
 }
 
-// TestPresenceRejectsEmptyChannel is the T024a §II check. It validates only
+// TestPresenceRejectsEmptyChannel is the §II presence check. It validates only
 // fields where empty is itself invalid — an empty channel is unusable however it
 // arose — because after decode a missing string and an empty string are
-// indistinguishable. gap's empty last_pos is deliberately NOT rejected: FR-006
+// indistinguishable. gap's empty last_pos is deliberately NOT rejected: the recovery contract
 // surfaces it and pairs a PossibleGap, so it is a valid frame, not a malformed one.
 func TestPresenceRejectsEmptyChannel(t *testing.T) {
 	rejected := []struct {

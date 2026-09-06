@@ -46,7 +46,7 @@ func waitForMessages(t *testing.T, ec *eventCollector, n int) []*Message {
 	}
 }
 
-// TestPosCursorRules pins the cursor rules directly (T125/T140): advance-on-live
+// TestPosCursorRules pins the cursor rules directly: advance-on-live
 // overwrites, history seeds only when absent and never overwrites, and an empty pos
 // anchors nothing.
 func TestPosCursorRules(t *testing.T) {
@@ -78,7 +78,7 @@ func TestPosCursorRules(t *testing.T) {
 	}
 }
 
-// TestReconnectFrameCarriesClientIDAndCursor covers the reconnect send (T126): the
+// TestReconnectFrameCarriesClientIDAndCursor covers the reconnect send: the
 // FIRST connect sends no reconnect frame; after a live message advances the cursor,
 // the reconnect on the next epoch carries the configured client_id and the
 // live-derived last_pos.
@@ -131,7 +131,7 @@ func TestReconnectFrameCarriesClientIDAndCursor(t *testing.T) {
 		t.Errorf("reconnect last_pos[t.a] = %q, want 1-100 (the live cursor)", got)
 	}
 
-	// F1: reconnect{last_pos} MUST lead the resume subscribe on the wire (FR-006) —
+	// F1: reconnect{last_pos} MUST lead the resume subscribe on the wire —
 	// the reconnect is sent before setConn publishes the conn to the serializer's send
 	// gate. Assert the order on epoch 2's received frames.
 	waitForFrameCount(t, f, typeSubscribe, 2) // the E2 resume subscribe
@@ -156,7 +156,7 @@ func TestReconnectFrameCarriesClientIDAndCursor(t *testing.T) {
 	}
 }
 
-// TestReplayWindowNormalizesSource covers the reconnect-replay window (T126/T143): a
+// TestReplayWindowNormalizesSource covers the reconnect-replay window: a
 // live-shaped `message` arriving before reconnect_ack is normalized to SourceReplay
 // and does NOT advance the cursor; a message after the ack is SourceLive; *Resumed is
 // emitted; and the cursor a later reconnect sends reflects only the live record.
@@ -278,7 +278,7 @@ func TestReconnectNotSentOnFirstConnectAfterFailedDial(t *testing.T) {
 }
 
 // TestReplayDoesNotAdvanceCursor is the discriminating test for the Source-before-
-// cursor order (T140): a replayed record is the ONLY pos-bearing record of its
+// cursor order: a replayed record is the ONLY pos-bearing record of its
 // epoch, so if the cursor were (wrongly) keyed on the pre-override Source it would
 // advance to the replay's pos — and the next reconnect would carry it. The assertion
 // that the next reconnect's last_pos has NO entry for the channel fails against that
@@ -415,7 +415,7 @@ func TestReconnectErrorClosesWindow(t *testing.T) {
 	}
 }
 
-// TestSourceForHistoryAndReplayMessage covers T143: a history:true `message` is
+// TestSourceForHistoryAndReplayMessage: a history:true `message` is
 // SourceHistory (and seeds the cursor when absent), a `replay_message` is
 // SourceReplay, and a replayed record duplicating a live one IS delivered (no
 // SDK-side de-duplication).
@@ -503,7 +503,7 @@ func TestWithClientIDValidationAndGeneration(t *testing.T) {
 	}
 }
 
-// TestSubscribeFromInsideMessagesLoopDoesNotDeadlock is T144 row 2 (SC-013): a
+// TestSubscribeFromInsideMessagesLoopDoesNotDeadlock is the second no-deadlock row: a
 // Subscribe issued from INSIDE a draining `for ev := range client.Messages()` loop
 // completes without deadlock. The serializer's queue is fire-and-forget and never
 // waits on the consumer, so a re-entrant control-plane call from the delivery loop is
@@ -554,7 +554,7 @@ func TestSubscribeFromInsideMessagesLoopDoesNotDeadlock(t *testing.T) {
 	waitForFrameCount(t, f, typeSubscribe, 2)
 }
 
-// TestControlPlaneResolvesWhileDataBacklogUndrained is T144 row 1 (SC-013): a
+// TestControlPlaneResolvesWhileDataBacklogUndrained is the first no-deadlock row: a
 // subscription_ack that decode has READ resolves the control-plane state
 // (Subscriptions/PendingSubscriptions) synchronously, even though the derived
 // *SubscriptionResult — a DATA-class event — cannot yet be delivered because the data

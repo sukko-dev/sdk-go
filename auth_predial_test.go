@@ -25,7 +25,7 @@ func TestTokenSourceOnlyFetchesBeforeFirstDial(t *testing.T) {
 	}
 }
 
-// TestTokenSourceDialFailuresPastMaxStayNonTerminal is the discriminating FR-005
+// TestTokenSourceDialFailuresPastMaxStayNonTerminal is the discriminating non-terminal-auth
 // line-63 test: a pre-dial fetch failure is non-terminal FOREVER. The token
 // endpoint is down across many reconnect attempts — well past
 // MaxTokenSourceAttempts — yet the client keeps backing off and re-attempting,

@@ -34,7 +34,7 @@ var (
 	_ Event = (*UnknownEvent)(nil)
 )
 
-// The error-shaped members: each is one of FR-010's typed error structs, so it
+// The error-shaped members: each is one of the roster's typed error structs, so it
 // implements both error and Event. `case *ReplayError:` in a type switch yields
 // a value that errors.As also matches — there is no parallel wrapper hierarchy.
 var (
@@ -75,7 +75,7 @@ var (
 // count and fails.
 //
 // The number is not magic: 13 non-error events + 12 error-shaped events, from
-// FR-001a's dispatch table and SDK-originated events table.
+// the dispatch table and SDK-originated events table.
 func TestEventRosterIsComplete(t *testing.T) {
 	roster := []Event{
 		// non-error (13)

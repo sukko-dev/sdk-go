@@ -5,8 +5,8 @@ import (
 	"time"
 )
 
-// TestDefaultsByValue asserts every exported default from the FR-001c options
-// table by value, per NFR-005(dd) ("every default in the table is asserted by
+// TestDefaultsByValue asserts every exported default from the options
+// table by value ("every default in the table is asserted by
 // value"). These are public API frozen from v0.1.0 and several must track a
 // server-side setting; the comment on each names what it tracks, so a drifting
 // server default shows up here as a failing assertion rather than a support
@@ -98,7 +98,7 @@ func TestDefaultsByValue(t *testing.T) {
 }
 
 // TestDefaultQueueSizeClearsTheFloor is the load-bearing relationship between
-// four of the constants above, and the reason SC-001's zero-config quickstart
+// four of the constants above, and the reason the zero-config quickstart
 // constructs at all: NewClient rejects a QueueSize below
 // HistoryLimit + MaxReplayMessages + AdvisoryHeadroom, so the default must
 // clear that floor by construction. Asserting the arithmetic here means a
