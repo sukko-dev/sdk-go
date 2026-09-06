@@ -260,8 +260,8 @@ func TestRecoveryFSMGapRedrivesAwaitingGrant(t *testing.T) {
 	}
 }
 
-// ─── epoch-gate (the advisor's W2 fix: an epoch-scoped event must never send on
-// another epoch's socket) ───
+// ─── epoch-gate (an epoch-scoped event must never send on another epoch's
+// socket) ───
 
 // TestRecoveryFSMStaleGapDoesNotSend: a gap whose epoch is no longer current is
 // NOT replayed on the live epoch (the server would reject a replay for a channel
@@ -421,7 +421,7 @@ func TestRecoveryFSMResetInterruptsOnlyInFlightReplays(t *testing.T) {
 
 // TestRecoveryFSMAwaitingGrantDeadlineInterrupts: the Slice-2→3 unwedge — a channel
 // left awaiting a re-grant whose grant never arrives is declared interrupted once
-// its (epoch-armed) deadline elapses, rather than stalling forever (Fable Finding-1).
+// its (epoch-armed) deadline elapses, rather than stalling forever.
 func TestRecoveryFSMAwaitingGrantDeadlineInterrupts(t *testing.T) {
 	f := newRecoveryFSM(10*time.Second, 30*time.Second)
 	e := &epoch{}
