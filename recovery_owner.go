@@ -200,11 +200,12 @@ func (c *Client) runRecoveryOwner(ownerCtx context.Context) {
 // state for one FSM call, so the FSM reads no clock or delivery state of its own.
 func (c *Client) recoveryTick() tick {
 	return tick{
-		now:          c.clock.Now(),
-		current:      c.currentEpochRef(),
-		episodes:     c.delivery.parkEpisodes(),
-		parked:       c.delivery.isParked(),
-		replayFrames: c.delivery.replayFrames,
+		now:           c.clock.Now(),
+		current:       c.currentEpochRef(),
+		episodes:      c.delivery.parkEpisodes(),
+		parked:        c.delivery.isParked(),
+		replayFrames:  c.delivery.replayFrames,
+		historyFrames: c.delivery.historyFrames(),
 	}
 }
 

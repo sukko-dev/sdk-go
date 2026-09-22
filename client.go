@@ -567,7 +567,7 @@ func (c *Client) History(ctx context.Context, channel string, limit int) error {
 		return &NotConnectedError{Op: "History"}
 	}
 	deadline := c.clock.Now().Add(c.cfg.recoveryDeadline)
-	if !c.historyFlight.claim(channel, e, deadline, c.delivery.parkEpisodes()) {
+	if !c.historyFlight.claim(channel, e, deadline, c.delivery.parkEpisodes(), c.delivery.historyFrames()) {
 		return ErrHistoryInProgress
 	}
 	if !c.sendHistoryFrame(e.conn, channel, limit) {
