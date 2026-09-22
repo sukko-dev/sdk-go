@@ -391,7 +391,12 @@ func (c *config) validateBounds() error {
 		return fmt.Errorf("sukko: PongTimeout (%v) must be less than HeartbeatInterval (%v)",
 			c.pongTimeout, c.heartbeatInterval)
 
-	case c.transport != TransportWebSocket && c.transport != TransportSSE:
+	case c.transport == TransportSSE:
+		// SSE is a declared TransportKind but not yet implemented. Fail fast rather than
+		// silently building a WebSocket transport (§XV: no silent fallback).
+		return fmt.Errorf("%w", ErrSSENotImplemented)
+
+	case c.transport != TransportWebSocket:
 		return fmt.Errorf("sukko: unknown transport %q", c.transport)
 
 	case c.httpClient == nil:

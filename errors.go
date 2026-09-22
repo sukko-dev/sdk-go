@@ -55,6 +55,11 @@ var (
 	// operation — SSE cannot publish over the stream or subscribe live.
 	ErrUnsupportedByTransport = errors.New("sukko: operation not supported by this transport")
 
+	// ErrSSENotImplemented is returned when WithTransport(TransportSSE) is selected: the SSE
+	// transport is planned but not yet implemented. Rejecting it is deliberate — the client never
+	// silently falls back to WebSocket (§XV).
+	ErrSSENotImplemented = errors.New("sukko: SSE transport is not yet implemented")
+
 	// ErrHistoryInProgress means a History call is already outstanding. History
 	// is single-flight so one caller's window cannot exhaust the delivery
 	// channel that another is relying on.

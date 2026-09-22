@@ -334,7 +334,8 @@ func TestBoundsValidation(t *testing.T) {
 		{"zero dial timeout", WithDialTimeout(0), true},
 		{"negative dial timeout", WithDialTimeout(-time.Second), true},
 
-		{"known transport", WithTransport(TransportSSE), false},
+		{"websocket transport", WithTransport(TransportWebSocket), false},
+		{"sse transport not yet implemented", WithTransport(TransportSSE), true},
 		{"unknown transport", WithTransport(TransportKind("carrier-pigeon")), true},
 
 		{"nil http client", WithHTTPClient(nil), true},
