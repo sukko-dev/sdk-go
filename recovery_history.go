@@ -37,23 +37,29 @@ type historyFlight struct {
 	// replay, which re-drives), so it needs no armEpoch.
 	epoch *epoch
 	// deadline is when a missing history_complete is declared interrupted; re-armed on
-	// a consumer stall (park-suspension), never on each history record (§VII).
+	// a consumer stall (park-suspension) AND on history-record progress, so it detects
+	// server SILENCE, not total history duration (platform ADR-0025), like the replay
+	// deadline.
 	deadline time.Time
 	// armEpisodes is delivery.parkEpisodes() at the last arm — the stall-suspension
 	// baseline, exactly as the replay deadline uses (recovery.go).
 	armEpisodes int64
+	// armHistoryFrames is delivery.historyFrames() at the last arm — the silence-
+	// suspension baseline: a change over the window means the server is still sending
+	// history records (progressing, not dead), so the deadline re-arms rather than fires.
+	armHistoryFrames int64
 }
 
 // claim reserves the slot for a new history on `channel`/`epoch`, reporting whether
 // it succeeded — false means one is already in flight (the caller returns
 // ErrHistoryInProgress). Caller goroutine.
-func (h *historyFlight) claim(channel string, epoch *epoch, deadline time.Time, episodes int64) bool {
+func (h *historyFlight) claim(channel string, epoch *epoch, deadline time.Time, episodes, frames int64) bool {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	if h.active {
 		return false
 	}
-	h.active, h.channel, h.epoch, h.deadline, h.armEpisodes = true, channel, epoch, deadline, episodes
+	h.active, h.channel, h.epoch, h.deadline, h.armEpisodes, h.armHistoryFrames = true, channel, epoch, deadline, episodes, frames
 	return true
 }
 
@@ -127,16 +133,15 @@ func (h *historyFlight) due(t tick, dur time.Duration) string {
 		h.active = false
 		return h.channel
 	}
-	// Consumer stall → suspend: a back-pressure episode during the window re-arms
-	// rather than fires, mirroring the replay deadline's park-suspension and the
-	// heartbeat's pong suspension (§VII). NOTE: unlike the replay deadline (platform
-	// ADR-0025), this does NOT yet reset on each history record, so it bounds
-	// park-adjusted TOTAL history duration, not inter-frame silence — a steadily
-	// arriving history exceeding the window can still false-interrupt (bounded by
-	// HistoryLimit). Aligning it to silence-detection is a tracked follow-up.
-	if t.parked || t.episodes != h.armEpisodes {
+	// Progress or consumer stall → suspend (re-arm, don't fire): a history record
+	// arriving during the window (historyFrames changed) means the server is still
+	// sending, and a back-pressure episode means the consumer stalled — neither is a
+	// dead history. So the deadline detects server SILENCE, not total duration (platform
+	// ADR-0025), mirroring the replay deadline's silence + park suspension (§VII).
+	if t.parked || t.episodes != h.armEpisodes || t.historyFrames != h.armHistoryFrames {
 		h.deadline = t.now.Add(dur)
 		h.armEpisodes = t.episodes
+		h.armHistoryFrames = t.historyFrames
 		return ""
 	}
 	h.active = false

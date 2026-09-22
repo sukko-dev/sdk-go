@@ -78,6 +78,12 @@ type delivery struct {
 	// (not client-global) so a wedged channel's silence is never masked by another
 	// channel's ongoing replay traffic.
 	replayFrameCounts sync.Map // channel(string) -> *atomic.Int64
+	// historyFrameCount tracks the number of history frames (SourceHistory records)
+	// received. History is single-flight (one outstanding request per client), so unlike
+	// the per-channel replay counter a single counter suffices — the recovery owner's
+	// history deadline reads it to suspend on server liveness (silence-detection, platform
+	// ADR-0025), the same lock-free counter-at-tick pattern as replay.
+	historyFrameCount atomic.Int64
 }
 
 // newDelivery builds a delivery over a channel of the given capacity.
@@ -269,6 +275,21 @@ func (d *delivery) replayFrames(channel string) int64 {
 		}
 	}
 	return 0
+}
+
+// recordHistoryFrame counts one history frame (a SourceHistory record). Called on the
+// decode goroutine before forward; a single lock-free atomic Add (history is
+// single-flight, so no per-channel keying is needed).
+func (d *delivery) recordHistoryFrame() {
+	d.historyFrameCount.Add(1)
+}
+
+// historyFrames returns the history-frame count. The history deadline samples it when
+// it arms and again at due(): a change over the window means the server is still
+// sending the history (progressing, not dead), so the deadline suspends rather than
+// fires — silence-detection (platform ADR-0025), mirroring the replay deadline.
+func (d *delivery) historyFrames() int64 {
+	return d.historyFrameCount.Load()
 }
 
 // enterParkedLocked records that a send has parked. The back-pressure episode

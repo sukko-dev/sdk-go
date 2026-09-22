@@ -64,16 +64,16 @@ func TestHistoryFlightSingleFlight(t *testing.T) {
 	var h historyFlight
 	e := &epoch{}
 
-	if !h.claim("t.a", e, fsmBase.Add(10*time.Second), 0) {
+	if !h.claim("t.a", e, fsmBase.Add(10*time.Second), 0, 0) {
 		t.Fatal("first claim failed")
 	}
-	if h.claim("t.b", e, fsmBase.Add(10*time.Second), 0) {
+	if h.claim("t.b", e, fsmBase.Add(10*time.Second), 0, 0) {
 		t.Error("second claim succeeded while a history was in flight (single-flight violated)")
 	}
 	if !h.releaseIfChannel("t.a") {
 		t.Error("releaseIfChannel(t.a) did not release the matching flight")
 	}
-	if !h.claim("t.b", e, fsmBase.Add(10*time.Second), 0) {
+	if !h.claim("t.b", e, fsmBase.Add(10*time.Second), 0, 0) {
 		t.Error("claim after release failed")
 	}
 }
@@ -86,12 +86,12 @@ func TestHistoryFlightSingleFlight(t *testing.T) {
 func TestHistoryFlightReleaseIsChannelMatched(t *testing.T) {
 	var h historyFlight
 	e := &epoch{}
-	h.claim("t.a", e, fsmBase.Add(10*time.Second), 0)
+	h.claim("t.a", e, fsmBase.Add(10*time.Second), 0, 0)
 
 	if h.releaseIfChannel("t.b") {
 		t.Error("releaseIfChannel(t.b) released a t.a flight (H1: release must be channel-matched)")
 	}
-	if h.claim("t.c", e, fsmBase.Add(10*time.Second), 0) {
+	if h.claim("t.c", e, fsmBase.Add(10*time.Second), 0, 0) {
 		t.Error("the slot was freed by a foreign-channel release; single-flight is broken")
 	}
 }
@@ -104,13 +104,13 @@ func TestHistoryFlightReleaseIsChannelMatched(t *testing.T) {
 func TestHistoryFlightReleaseIfIsIdentityMatched(t *testing.T) {
 	var h historyFlight
 	e1, e2 := &epoch{}, &epoch{}
-	h.claim("t.a", e1, fsmBase, 0)
+	h.claim("t.a", e1, fsmBase, 0, 0)
 
 	// The slot now holds a DIFFERENT flight (re-claimed on e2 after this caller's was
 	// interrupted). This caller's send-fail release for (t.a, e1) must NOT free it.
-	h.releaseIf("t.a", e1)         // frees the t.a/e1 flight (it is the current one)
-	h.claim("t.b", e2, fsmBase, 0) // a fresh flight on e2
-	if h.releaseIf("t.a", e1) {    // a straggler release for the old (t.a, e1)
+	h.releaseIf("t.a", e1)            // frees the t.a/e1 flight (it is the current one)
+	h.claim("t.b", e2, fsmBase, 0, 0) // a fresh flight on e2
+	if h.releaseIf("t.a", e1) {       // a straggler release for the old (t.a, e1)
 		t.Error("releaseIf(t.a, e1) freed a t.b/e2 flight; release must be identity-matched (channel AND epoch)")
 	}
 	// A different epoch alone is enough to reject.
@@ -129,7 +129,7 @@ func TestHistoryFlightReleaseIfIsIdentityMatched(t *testing.T) {
 func TestHistoryFlightDeadlineInterrupts(t *testing.T) {
 	var h historyFlight
 	e := &epoch{}
-	h.claim("t.a", e, fsmBase.Add(10*time.Second), 0)
+	h.claim("t.a", e, fsmBase.Add(10*time.Second), 0, 0)
 
 	if ch := h.due(tick{now: fsmBase.Add(9 * time.Second), current: e}, 10*time.Second); ch != "" {
 		t.Fatalf("due before the deadline = %q, want empty", ch)
@@ -137,7 +137,7 @@ func TestHistoryFlightDeadlineInterrupts(t *testing.T) {
 	if ch := h.due(tick{now: fsmBase.Add(10 * time.Second), current: e}, 10*time.Second); ch != "t.a" {
 		t.Fatalf("due at the deadline = %q, want t.a", ch)
 	}
-	if !h.claim("t.b", e, fsmBase, 0) {
+	if !h.claim("t.b", e, fsmBase, 0, 0) {
 		t.Error("slot not released after the deadline interrupt")
 	}
 }
@@ -148,7 +148,7 @@ func TestHistoryFlightDeadlineInterrupts(t *testing.T) {
 func TestHistoryFlightDeadlineParkSuspension(t *testing.T) {
 	var h historyFlight
 	e := &epoch{}
-	h.claim("t.a", e, fsmBase.Add(10*time.Second), 0) // armEpisodes=0
+	h.claim("t.a", e, fsmBase.Add(10*time.Second), 0, 0) // armEpisodes=0
 
 	if ch := h.due(tick{now: fsmBase.Add(10 * time.Second), current: e, parked: true}, 10*time.Second); ch != "" {
 		t.Fatalf("due while parked = %q, want empty (suspended)", ch)
@@ -168,13 +168,13 @@ func TestHistoryFlightDeadlineParkSuspension(t *testing.T) {
 func TestHistoryFlightEpochDeathInterrupts(t *testing.T) {
 	var h historyFlight
 	e := &epoch{}
-	h.claim("t.a", e, fsmBase.Add(10*time.Second), 0)
+	h.claim("t.a", e, fsmBase.Add(10*time.Second), 0, 0)
 
 	// Reset path: the epoch changed → interrupt + release.
 	if ch := h.interruptIfEpochDead(&epoch{}); ch != "t.a" {
 		t.Fatalf("interruptIfEpochDead(other epoch) = %q, want t.a", ch)
 	}
-	if !h.claim("t.b", e, fsmBase.Add(10*time.Second), 0) {
+	if !h.claim("t.b", e, fsmBase.Add(10*time.Second), 0, 0) {
 		t.Fatal("slot not released after the epoch-death interrupt")
 	}
 	// A same-epoch reset (no epoch change) does not interrupt the current flight.
@@ -391,5 +391,83 @@ func TestHistoryLifecycleErrors(t *testing.T) {
 	closeClient(t, c)
 	if err := c.History(context.Background(), "t.a", 10); !errors.Is(err, ErrClosed) {
 		t.Errorf("History after Close = %v, want ErrClosed", err)
+	}
+}
+
+// TestHistoryFlightDeadlineSilenceSuspension: the history deadline detects SERVER
+// silence, not total duration (platform ADR-0025) — a history record arriving during
+// the window (historyFrames changed) suspends it (re-arm, no fire); a subsequent
+// silent window then fires. This is the sukko-go silence half for history, mirroring
+// the replay deadline.
+func TestHistoryFlightDeadlineSilenceSuspension(t *testing.T) {
+	var h historyFlight
+	e := &epoch{}
+	h.claim("t.a", e, fsmBase.Add(10*time.Second), 0, 0) // deadline +10s, no history frames yet
+
+	// A history record arrived during the window → progress → suspend, re-arm to +20s.
+	if ch := h.due(tick{now: fsmBase.Add(10 * time.Second), current: e, historyFrames: 1}, 10*time.Second); ch != "" {
+		t.Fatalf("due after a history record = %q, want empty (progress suspends)", ch)
+	}
+	// No further record: a full silent window → interrupt. (Removing the
+	// armHistoryFrames recapture in due()'s re-arm makes this suspend forever.)
+	if ch := h.due(tick{now: fsmBase.Add(20 * time.Second), current: e, historyFrames: 1}, 10*time.Second); ch != "t.a" {
+		t.Fatalf("due after a silent window = %q, want t.a", ch)
+	}
+}
+
+// TestApplyRecoveryCountsHistoryFrames pins the production wiring of history
+// silence-detection: a SourceHistory record through applyRecovery bumps the counter
+// the history deadline reads, SourceReplay/SourceLive do not, and recoveryTick reads
+// it — closing the decode → counter → tick chain (§VIII).
+func TestApplyRecoveryCountsHistoryFrames(t *testing.T) {
+	c := newTestClient(t, newFakeWS(t))
+	if got := c.delivery.historyFrames(); got != 0 {
+		t.Fatalf("initial historyFrames = %d, want 0", got)
+	}
+	c.applyRecovery(&Message{Channel: "acme.x", Source: SourceHistory, Pos: "p1"})
+	c.applyRecovery(&Message{Channel: "acme.x", Source: SourceHistory, Pos: "p2"})
+	if got := c.delivery.historyFrames(); got != 2 {
+		t.Fatalf("after two SourceHistory records, historyFrames = %d, want 2", got)
+	}
+	// Replay and live records are not history progress.
+	c.applyRecovery(&Message{Channel: "acme.x", Source: SourceReplay})
+	c.applyRecovery(&Message{Channel: "acme.x", Source: SourceLive, Pos: "p3"})
+	if got := c.delivery.historyFrames(); got != 2 {
+		t.Fatalf("a non-history record bumped historyFrames to %d, want 2", got)
+	}
+	// The owner's tick must read it (pins the recoveryTick wiring line).
+	if got := c.recoveryTick().historyFrames; got != 2 {
+		t.Fatalf("recoveryTick().historyFrames = %d, want 2 (tick not wired to delivery.historyFrames)", got)
+	}
+}
+
+// TestHistoryClaimCapturesFrameBaseline pins the History()→claim() baseline wiring:
+// claim must record armHistoryFrames at the CURRENT history-frame count, not a
+// constant. Without it, every flight after the first record ever received arms with a
+// stale baseline and over-waits one full deadline window before a silent history
+// interrupts. A flight-level unit test cannot catch this (the wiring is at the client
+// call site), so this drives the real History() path.
+func TestHistoryClaimCapturesFrameBaseline(t *testing.T) {
+	f := newFakeWS(t)
+	f.script(epochScript{respond: map[string][]string{
+		typeSubscribe: {`{"type":"subscription_ack","subscribed":["t.a"],"count":1}`},
+	}})
+	c, _, _ := connectedHistoryClient(t, f)
+	defer closeClient(t, c)
+
+	// Two history frames have already been received on this client.
+	c.delivery.recordHistoryFrame()
+	c.delivery.recordHistoryFrame()
+
+	if err := c.History(context.Background(), "t.a", 10); err != nil {
+		t.Fatalf("History: %v", err)
+	}
+	waitForFrameCount(t, f, typeHistory, 1) // the claim (and send) has happened
+
+	c.historyFlight.mu.Lock()
+	got := c.historyFlight.armHistoryFrames
+	c.historyFlight.mu.Unlock()
+	if got != 2 {
+		t.Fatalf("claim armHistoryFrames = %d, want 2 (baseline not wired to delivery.historyFrames)", got)
 	}
 }

@@ -275,11 +275,12 @@ type recoveryOutcome struct {
 // parked are c.delivery.parkEpisodes()/isParked() for the deadline's park-suspension;
 // replayFrames(channel) is c.delivery.replayFrames, its per-channel silence-suspension (platform ADR-0025).
 type tick struct {
-	now          time.Time
-	current      *epoch
-	episodes     int64
-	parked       bool
-	replayFrames func(channel string) int64
+	now           time.Time
+	current       *epoch
+	episodes      int64
+	parked        bool
+	replayFrames  func(channel string) int64
+	historyFrames int64
 }
 
 // frames returns the recovery-frame count for channel via the owner-supplied accessor,
@@ -624,6 +625,9 @@ func (c *Client) applyRecovery(m *Message) {
 		c.cursor.advance(m.Channel, m.Pos)
 	case SourceHistory:
 		c.cursor.seedIfAbsent(m.Channel, m.Pos)
+		// A history record is recovery progress: bump the lock-free counter the history
+		// deadline reads at its tick to suspend on server liveness (platform ADR-0025).
+		c.delivery.recordHistoryFrame()
 	case SourceReplay:
 		// A replayed record (window override or replay_message) anchors nothing, but it
 		// is recovery PROGRESS: bump the lock-free frame counter the recovery deadline
