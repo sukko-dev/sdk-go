@@ -127,9 +127,13 @@ func (h *historyFlight) due(t tick, dur time.Duration) string {
 		h.active = false
 		return h.channel
 	}
-	// Consumer stall → suspend (measure SERVER silence, not consumer speed): a
-	// back-pressure episode during the window re-arms rather than fires, mirroring
-	// the replay deadline and the heartbeat's pong suspension (§VII).
+	// Consumer stall → suspend: a back-pressure episode during the window re-arms
+	// rather than fires, mirroring the replay deadline's park-suspension and the
+	// heartbeat's pong suspension (§VII). NOTE: unlike the replay deadline (platform
+	// ADR-0025), this does NOT yet reset on each history record, so it bounds
+	// park-adjusted TOTAL history duration, not inter-frame silence — a steadily
+	// arriving history exceeding the window can still false-interrupt (bounded by
+	// HistoryLimit). Aligning it to silence-detection is a tracked follow-up.
 	if t.parked || t.episodes != h.armEpisodes {
 		h.deadline = t.now.Add(dur)
 		h.armEpisodes = t.episodes

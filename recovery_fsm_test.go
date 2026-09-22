@@ -504,3 +504,84 @@ func TestRecoveryFSMCompletedReplayDoesNotInterrupt(t *testing.T) {
 		t.Fatalf("due long after completion = %+v interrupts, want 0 (deadline cleared on complete)", out.interrupts)
 	}
 }
+
+// TestRecoveryFSMDeadlineSuspendedWhileReplayProgressing: the deadline measures SERVER
+// silence, not total replay duration (platform ADR-0025). A recovery frame arriving
+// during the window is progress → suspend (re-arm, no fire); a subsequent full window
+// with NO new frame → fire. Both sides. This is the sukko-go half of the cross-SDK
+// silence semantics the replay-slow-steady-server parity vector pins.
+func TestRecoveryFSMDeadlineSuspendedWhileReplayProgressing(t *testing.T) {
+	f := newRecoveryFSM(10*time.Second, 30*time.Second)
+	e := &epoch{}
+	frames := map[string]int64{}
+	at := func(d time.Duration) tick {
+		return tick{now: fsmBase.Add(d), current: e, replayFrames: func(ch string) int64 { return frames[ch] }}
+	}
+	f.handleGap("t.a", "g-1", e, at(0)) // REPLAYING, armReplayFrames=0, deadline +30s
+
+	// A frame arrived during the window → progress → suspend (re-arm to +60s), no fire.
+	frames["t.a"] = 1
+	if out := f.due(at(30 * time.Second)); len(out.interrupts) != 0 {
+		t.Fatalf("due after a recovery frame = %d interrupts, want 0 (progress suspends)", len(out.interrupts))
+	}
+	// No further frame: a full window of server silence → interrupt. (Removing the
+	// armReplayFrames recapture in due()'s re-arm makes this suspend forever — the mutant
+	// this line kills.)
+	if out := f.due(at(60 * time.Second)); len(out.interrupts) != 1 || out.interrupts[0] != "t.a" {
+		t.Fatalf("due after a silent window = %+v, want 1 interrupt for t.a", out.interrupts)
+	}
+}
+
+// TestRecoveryFSMDeadlineIsPerChannel: silence-suspension is scoped PER CHANNEL — a
+// wedged channel's deadline is not kept alive by another channel's replay traffic. A
+// client-global frame counter would mask t.b's stall behind t.a's frames; the
+// per-channel counter (platform ADR-0025) interrupts exactly the wedged channel.
+func TestRecoveryFSMDeadlineIsPerChannel(t *testing.T) {
+	f := newRecoveryFSM(10*time.Second, 30*time.Second)
+	e := &epoch{}
+	frames := map[string]int64{}
+	at := func(d time.Duration) tick {
+		return tick{now: fsmBase.Add(d), current: e, replayFrames: func(ch string) int64 { return frames[ch] }}
+	}
+	f.handleGap("t.a", "a-1", e, at(0)) // both REPLAYING, deadline +30s
+	f.handleGap("t.b", "b-1", e, at(0))
+
+	// t.a's replay is progressing; t.b's server stream is wedged (no frames).
+	frames["t.a"] = 5
+	out := f.due(at(30 * time.Second))
+	if len(out.interrupts) != 1 || out.interrupts[0] != "t.b" {
+		t.Fatalf("due = %+v, want exactly [t.b] (t.a progressing, t.b wedged) — a global counter would mask t.b", out.interrupts)
+	}
+}
+
+// TestApplyRecoveryCountsReplayFrames pins the PRODUCTION wiring of silence-detection:
+// a SourceReplay record passing through applyRecovery (decode goroutine) must bump the
+// per-channel recovery-frame counter the deadline reads, and a SourceLive record must
+// not. Deleting the bump silently regresses the client to total-duration semantics with
+// the FSM tests still green, so this is the guard for that site (§VIII).
+func TestApplyRecoveryCountsReplayFrames(t *testing.T) {
+	c := newTestClient(t, newFakeWS(t))
+	if got := c.delivery.replayFrames("acme.x"); got != 0 {
+		t.Fatalf("initial replayFrames = %d, want 0", got)
+	}
+	c.applyRecovery(&Message{Channel: "acme.x", Source: SourceReplay})
+	c.applyRecovery(&Message{Channel: "acme.x", Source: SourceReplay})
+	if got := c.delivery.replayFrames("acme.x"); got != 2 {
+		t.Fatalf("after two SourceReplay records, replayFrames = %d, want 2", got)
+	}
+	// A live record is not recovery progress — it must not bump the counter.
+	c.applyRecovery(&Message{Channel: "acme.x", Source: SourceLive, Pos: "p1"})
+	if got := c.delivery.replayFrames("acme.x"); got != 2 {
+		t.Fatalf("a SourceLive record bumped replayFrames to %d, want 2 (unchanged)", got)
+	}
+	// A different channel keeps its own count.
+	if got := c.delivery.replayFrames("acme.y"); got != 0 {
+		t.Fatalf("unrelated channel replayFrames = %d, want 0", got)
+	}
+	// The owner's tick must actually READ the per-channel counter — pins the full
+	// decode → counter → tick → due() chain, so the recoveryTick wiring line cannot be
+	// deleted (nil-safe frames() would otherwise default it to zero) with tests green.
+	if got := c.recoveryTick().frames("acme.x"); got != 2 {
+		t.Fatalf("recoveryTick().frames(acme.x) = %d, want 2 (tick not wired to delivery.replayFrames)", got)
+	}
+}

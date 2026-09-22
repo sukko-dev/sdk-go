@@ -109,9 +109,10 @@ const (
 	// gap-to-replay path honors it rather than provoking replay_rate_limited.
 	DefaultReplayFloor = 10 * time.Second
 
-	// DefaultRecoveryDeadline is how long the client waits for a recovery
-	// terminator before surfacing a truncated recovery — 2× the server's
-	// WS_REPLAY_TIMEOUT of 5s, for margin.
+	// DefaultRecoveryDeadline is the maximum SILENCE between recovery frames before a
+	// truncated recovery is surfaced (platform ADR-0025: silence, not total duration —
+	// so it needs no knowledge of the server's replay timeout). 10s of frame silence is
+	// generous for a live server; a large but steadily progressing replay never trips it.
 	DefaultRecoveryDeadline = 10 * time.Second
 
 	// DefaultSSEIdleTimeout is how long an SSE stream may deliver no bytes at

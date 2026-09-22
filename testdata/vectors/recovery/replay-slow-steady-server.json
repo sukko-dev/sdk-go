@@ -1,0 +1,16 @@
+{
+  "name": "recovery/replay-slow-steady-server",
+  "machine": "recovery",
+  "contract_version": "1.4.1",
+  "description": "A replay whose frames arrive steadily but whose total duration exceeds the recovery deadline (10s) must NOT interrupt: each frame is recovery progress that re-arms the deadline, so it fires only on true server silence. The gap arms the deadline at t=0; a replay_message at t=6s (6s < 10s silence) keeps it alive; replay_complete at t=12s (>10s total) ends the cycle cleanly. Expected: exactly the one replay, no raise_recovery_interrupted.",
+  "inputs": [
+    { "event": "gap", "channel": "acme.orders", "last_pos": "acme.orders:4" },
+    { "advance": 6000 },
+    { "event": "replay_message", "channel": "acme.orders" },
+    { "advance": 6000 },
+    { "event": "replay_complete", "channel": "acme.orders" }
+  ],
+  "expect": [
+    { "action": "send_replay", "channel": "acme.orders", "from_pos": "acme.orders:4" }
+  ]
+}

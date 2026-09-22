@@ -3,6 +3,7 @@ package sukko
 import (
 	"context"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -70,6 +71,13 @@ type delivery struct {
 	// harness needs a positive observable that a send blocked, because proving a
 	// negative ("the send did not complete") otherwise needs a wall-clock wait.
 	blockWaiters []chan struct{}
+	// replayFrameCounts tracks, PER CHANNEL, the number of recovery frames (SourceReplay
+	// records) received — the recovery deadline's server-liveness signal (platform
+	// ADR-0025). A *atomic.Int64 per channel: created lazily on the first frame, bumped
+	// lock-free on the decode goroutine, read lock-free at the owner's tick. Per-channel
+	// (not client-global) so a wedged channel's silence is never masked by another
+	// channel's ongoing replay traffic.
+	replayFrameCounts sync.Map // channel(string) -> *atomic.Int64
 }
 
 // newDelivery builds a delivery over a channel of the given capacity.
@@ -233,6 +241,34 @@ func (d *delivery) isParked() bool {
 // while a backlog drains.
 func (d *delivery) parkEpisodes() int64 {
 	return d.counters.backpressureBlocks.Load()
+}
+
+// recordReplayFrame counts one recovery frame (a SourceReplay record) for its channel.
+// Called on the decode goroutine before forward; lock-free on the common (channel
+// already seen) path — a single atomic Add — with a one-time LoadOrStore per channel.
+func (d *delivery) recordReplayFrame(channel string) {
+	v, loaded := d.replayFrameCounts.Load(channel)
+	if !loaded {
+		v, _ = d.replayFrameCounts.LoadOrStore(channel, new(atomic.Int64))
+	}
+	if c, isCtr := v.(*atomic.Int64); isCtr {
+		c.Add(1)
+	}
+}
+
+// replayFrames returns the recovery-frame count for one channel (0 if none yet). The
+// recovery deadline samples it per channel when it arms and again at due(): a change
+// over the window means the server is still sending THAT channel's replay (progressing,
+// not dead), so the deadline suspends rather than fires — silence-detection without a
+// per-message owner event (platform ADR-0025). Same lock-free counter-at-tick pattern
+// as parkEpisodes, scoped per channel so one channel's frames cannot mask another's stall.
+func (d *delivery) replayFrames(channel string) int64 {
+	if v, ok := d.replayFrameCounts.Load(channel); ok {
+		if c, isCtr := v.(*atomic.Int64); isCtr {
+			return c.Load()
+		}
+	}
+	return 0
 }
 
 // enterParkedLocked records that a send has parked. The back-pressure episode
