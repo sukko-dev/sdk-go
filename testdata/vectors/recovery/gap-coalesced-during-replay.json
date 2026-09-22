@@ -1,0 +1,14 @@
+{
+  "name": "recovery/gap-coalesced-during-replay",
+  "machine": "recovery",
+  "contract_version": "1.4.1",
+  "description": "A gap arriving mid-replay is coalesced (retained as the follow-up anchor), not immediately re-replayed; and a replay_complete while the per-channel replay floor is still closed enters floor-wait rather than firing a second replay. Only the first gap produces a send_replay.",
+  "inputs": [
+    { "event": "gap", "channel": "acme.orders", "last_pos": "acme.orders:4" },
+    { "event": "gap", "channel": "acme.orders", "last_pos": "acme.orders:9" },
+    { "event": "replay_complete", "channel": "acme.orders" }
+  ],
+  "expect": [
+    { "action": "send_replay", "channel": "acme.orders", "from_pos": "acme.orders:4" }
+  ]
+}
