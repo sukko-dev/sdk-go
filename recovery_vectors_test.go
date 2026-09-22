@@ -52,20 +52,33 @@ func runRecoveryVector(t *testing.T, s vectorScenario) []map[string]any {
 	return out
 }
 
-func TestRecoveryVectorGapReplayBasic(t *testing.T) {
-	raw, err := os.ReadFile(filepath.Join("testdata", "vectors", "recovery", "gap-replay-basic.json"))
+func TestRecoveryVectors(t *testing.T) {
+	// Every vendored recovery vector replays through the real recoveryFSM and must produce the
+	// scenario's canonical actions — adding a scenario is one JSON file (vendored), no test change.
+	files, err := filepath.Glob(filepath.Join("testdata", "vectors", "recovery", "*.json"))
 	if err != nil {
-		t.Fatalf("read vector: %v", err)
+		t.Fatalf("glob vectors: %v", err)
 	}
-	var s vectorScenario
-	if err := json.Unmarshal(raw, &s); err != nil {
-		t.Fatalf("parse vector: %v", err)
+	if len(files) == 0 {
+		t.Fatal("no recovery vectors found")
 	}
-	if s.Machine != "recovery" {
-		t.Fatalf("machine = %q, want recovery", s.Machine)
-	}
-	got := runRecoveryVector(t, s)
-	if !reflect.DeepEqual(got, s.Expect) {
-		t.Errorf("canonical actions mismatch\n got: %#v\nwant: %#v", got, s.Expect)
+	for _, path := range files {
+		t.Run(filepath.Base(path), func(t *testing.T) {
+			raw, err := os.ReadFile(path)
+			if err != nil {
+				t.Fatalf("read vector: %v", err)
+			}
+			var s vectorScenario
+			if err := json.Unmarshal(raw, &s); err != nil {
+				t.Fatalf("parse vector: %v", err)
+			}
+			if s.Machine != "recovery" {
+				t.Fatalf("machine = %q, want recovery", s.Machine)
+			}
+			got := runRecoveryVector(t, s)
+			if !reflect.DeepEqual(got, s.Expect) {
+				t.Errorf("canonical actions mismatch\n got: %#v\nwant: %#v", got, s.Expect)
+			}
+		})
 	}
 }
