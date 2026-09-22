@@ -101,8 +101,11 @@ sukko.ParseChannel("acme.trades.btc")    // -> {Tenant: "acme", Suffix: "trades.
 On a Kafka backend the SDK recovers missed messages automatically: it reconnects with exponential
 backoff + jitter and replays from the last position, turning advisory `gap` notices into live
 `replay`s — all surfaced through the same `Messages()` stream. The delivery guarantee is
-**at-least-once within the replay window, best-effort beyond**. On the Direct backend (no positions),
-a disconnect surfaces a `*PossibleGap` event per channel so data loss is never silent.
+**at-least-once within the replay window, best-effort beyond**. The recovery *deadline* interrupts
+a replay only on server *silence* — a long but steadily progressing replay is never cut short by its
+total duration (`WithRecoveryDeadline` bounds the silence between recovery frames, not the whole
+replay; a replay rejection or a dropped connection can still interrupt for their own reasons). On the Direct backend (no positions), a disconnect
+surfaces a `*PossibleGap` event per channel so data loss is never silent.
 
 ## Errors
 

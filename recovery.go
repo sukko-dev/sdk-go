@@ -218,21 +218,28 @@ type recoveryChannel struct {
 	// deadline is the absolute time by which an in-flight replay (recReplaying) must
 	// terminate, or an awaiting-grant channel must be re-granted, before its recovery
 	// is declared interrupted. Zero = no deadline armed — recIdle, and
-	// recFloorWait (a floor-wait is bounded by floorWake, not the deadline). It fires
-	// ONLY after a full window has elapsed under a single live epoch with a healthy
-	// consumer: while disconnected, under a different epoch than it was armed under
-	// (armEpoch), or while the delivery consumer stalled, due() suspends (re-arms) it
-	// rather than firing — so backoff/dial wall-clock and epoch churn never expire a
-	// recovery and drop its anchor before the reconnect can re-drive.
+	// recFloorWait (a floor-wait is bounded by floorWake, not the deadline). It detects
+	// server SILENCE, not total replay duration (platform ADR-0025): it fires ONLY after a full
+	// window with no recovery PROGRESS under a single live epoch — while disconnected,
+	// under a different epoch than it was armed under (armEpoch), while the delivery
+	// consumer stalled, or while recovery frames are still arriving, due() suspends
+	// (re-arms) it rather than firing. So backoff/dial wall-clock and epoch churn never
+	// expire a recovery, and a large-but-progressing replay never false-interrupts.
 	deadline time.Time
 	// armEpisodes is delivery.parkEpisodes() captured when `deadline` was armed. If a
 	// back-pressure episode opened during the window (parked now, or the count
 	// changed), the missing terminator is the slow consumer's doing, not a dead
 	// recovery — the deadline is suspended (re-armed), never fired. This mirrors the
-	// heartbeat's pong-deadline park-suspension (epoch.go) rather than resetting the
-	// deadline on every replay_message, which would be hot-path observational
-	// interception on the message pipeline (§VII).
+	// heartbeat's pong-deadline park-suspension (epoch.go).
 	armEpisodes int64
+	// armReplayFrames is delivery.replayFrames(channel) captured when `deadline` was armed. A
+	// change over the window means a recovery frame arrived — the server is still
+	// sending, so the replay is progressing, not dead: the deadline is suspended
+	// (re-armed), giving silence-detection without a per-message owner event. It is the
+	// same lock-free counter-at-tick pattern as armEpisodes, read at due() — NOT
+	// resetting the deadline on every replay_message, which would be hot-path
+	// observational interception on the message pipeline (§VII, platform ADR-0025).
+	armReplayFrames int64
 	// armEpoch is currentEpochRef() captured when `deadline` was armed. A deadline that
 	// elapses under a DIFFERENT epoch (or under none, while disconnected) has not had a
 	// full window on the live connection — so it is suspended, giving the reconnect's
@@ -265,12 +272,24 @@ type recoveryOutcome struct {
 // tick is the owner's clock/epoch context, passed to every FSM method so the FSM
 // stays pure — it reads no clock and touches no delivery state of its own. now is
 // c.clock.Now(); current is c.currentEpochRef() (the send-gate epoch); episodes and
-// parked are c.delivery.parkEpisodes()/isParked() for the deadline's park-suspension.
+// parked are c.delivery.parkEpisodes()/isParked() for the deadline's park-suspension;
+// replayFrames(channel) is c.delivery.replayFrames, its per-channel silence-suspension (platform ADR-0025).
 type tick struct {
-	now      time.Time
-	current  *epoch
-	episodes int64
-	parked   bool
+	now          time.Time
+	current      *epoch
+	episodes     int64
+	parked       bool
+	replayFrames func(channel string) int64
+}
+
+// frames returns the recovery-frame count for channel via the owner-supplied accessor,
+// treating a nil accessor (tests that do not exercise silence-suspension) as zero
+// progress — so an unset tick never fires the deadline early and never masks a stall.
+func (t tick) frames(channel string) int64 {
+	if t.replayFrames == nil {
+		return 0
+	}
+	return t.replayFrames(channel)
 }
 
 // recoveryFSM holds the per-channel FSM behind the single-owner goroutine.
@@ -303,6 +322,7 @@ func (f *recoveryFSM) beginReplay(rec *recoveryChannel, channel, fromPos string,
 	rec.floorWake = time.Time{}
 	rec.deadline = t.now.Add(f.deadline)
 	rec.armEpisodes = t.episodes
+	rec.armReplayFrames = t.frames(channel)
 	rec.armEpoch = t.current
 	rec.epoch = t.current
 	return []replayAction{{channel: channel, fromPos: fromPos, epoch: t.current}}
@@ -313,13 +333,14 @@ func (f *recoveryFSM) beginReplay(rec *recoveryChannel, channel, fromPos string,
 // on each epoch boundary — every new epoch gets a full window to deliver the
 // re-grant), so a re-grant that never arrives is eventually declared interrupted
 // rather than wedging silently (the Slice-2 → Slice-3 awaiting-grant unwedge).
-func (f *recoveryFSM) enterAwaitingGrant(rec *recoveryChannel, anchor string, t tick) {
+func (f *recoveryFSM) enterAwaitingGrant(rec *recoveryChannel, channel, anchor string, t tick) {
 	rec.phase = recAwaitingGrant
 	rec.anchor = anchor
 	rec.followup, rec.hasFollowup = "", false
 	rec.floorWake = time.Time{}
 	rec.deadline = t.now.Add(f.deadline)
 	rec.armEpisodes = t.episodes
+	rec.armReplayFrames = t.frames(channel)
 	rec.armEpoch = t.current
 	rec.epoch = nil
 }
@@ -351,7 +372,7 @@ func (f *recoveryFSM) handleGap(channel, lastPos string, evEpoch *epoch, t tick)
 	// cycle keeps its earlier anchor (covers this gap too).
 	if evEpoch != t.current {
 		if rec.phase == recIdle {
-			f.enterAwaitingGrant(rec, lastPos, t)
+			f.enterAwaitingGrant(rec, channel, lastPos, t)
 		}
 		return nil
 	}
@@ -409,7 +430,7 @@ func (f *recoveryFSM) handleReplayComplete(channel string, evEpoch *epoch, t tic
 	// The completing epoch is gone: re-drive the follow-up from its anchor on the
 	// next grant rather than send on a dead socket.
 	if evEpoch != t.current {
-		f.enterAwaitingGrant(rec, followup, t)
+		f.enterAwaitingGrant(rec, channel, followup, t)
 		return nil
 	}
 	if floorWake := rec.lastReplayAt.Add(f.floor); floorWake.After(t.now) {
@@ -477,14 +498,15 @@ func (f *recoveryFSM) handleReset(t tick) []string {
 		switch rec.phase {
 		case recReplaying:
 			interrupts = append(interrupts, channel)
-			f.enterAwaitingGrant(rec, rec.anchor, t)
+			f.enterAwaitingGrant(rec, channel, rec.anchor, t)
 		case recFloorWait:
-			f.enterAwaitingGrant(rec, rec.anchor, t)
+			f.enterAwaitingGrant(rec, channel, rec.anchor, t)
 		case recAwaitingGrant:
 			// Still awaiting a re-grant across another epoch death — re-arm the deadline
 			// so each new epoch gets a full window to deliver the grant.
 			rec.deadline = t.now.Add(f.deadline)
 			rec.armEpisodes = t.episodes
+			rec.armReplayFrames = t.frames(channel)
 			rec.armEpoch = t.current
 		case recIdle:
 			// Nothing in flight; only the floor reset below applies.
@@ -515,7 +537,7 @@ func (f *recoveryFSM) due(t tick) recoveryOutcome {
 				continue
 			}
 			if rec.epoch != t.current {
-				f.enterAwaitingGrant(rec, rec.anchor, t)
+				f.enterAwaitingGrant(rec, channel, rec.anchor, t)
 				continue
 			}
 			out.replays = append(out.replays, f.beginReplay(rec, channel, rec.anchor, t)...)
@@ -535,9 +557,10 @@ func (f *recoveryFSM) due(t tick) recoveryOutcome {
 			// delivery consumer stalled during the window (parked now, or an episode
 			// opened since the arm). armEpoch==nil==current alone (armed and fired while
 			// disconnected) is caught by the explicit current==nil check.
-			if t.current == nil || rec.armEpoch != t.current || t.parked || t.episodes != rec.armEpisodes {
+			if t.current == nil || rec.armEpoch != t.current || t.parked || t.episodes != rec.armEpisodes || t.frames(channel) != rec.armReplayFrames {
 				rec.deadline = t.now.Add(f.deadline)
 				rec.armEpisodes = t.episodes
+				rec.armReplayFrames = t.frames(channel)
 				rec.armEpoch = t.current
 				continue
 			}
@@ -602,6 +625,9 @@ func (c *Client) applyRecovery(m *Message) {
 	case SourceHistory:
 		c.cursor.seedIfAbsent(m.Channel, m.Pos)
 	case SourceReplay:
-		// A replayed record (window override or replay_message) anchors nothing.
+		// A replayed record (window override or replay_message) anchors nothing, but it
+		// is recovery PROGRESS: bump the lock-free frame counter the recovery deadline
+		// reads at its tick to suspend on server liveness (silence-detection, platform ADR-0025).
+		c.delivery.recordReplayFrame(m.Channel)
 	}
 }

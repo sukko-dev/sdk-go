@@ -227,8 +227,9 @@ func WithHistoryLimit(n int) Option { return func(c *config) { c.historyLimit = 
 // requests, matching the server's own rate limit so the SDK does not provoke it.
 func WithReplayFloor(d time.Duration) Option { return func(c *config) { c.replayFloor = d } }
 
-// WithRecoveryDeadline sets how long the client waits for a recovery terminator
-// before reporting the recovery as interrupted.
+// WithRecoveryDeadline sets the maximum SILENCE between recovery frames before the
+// client reports the recovery as interrupted — a replay that keeps making progress is
+// never cut short by its total duration (platform ADR-0025).
 func WithRecoveryDeadline(d time.Duration) Option { return func(c *config) { c.recoveryDeadline = d } }
 
 // WithClientID sets the identity used to resume a session across reconnects.
