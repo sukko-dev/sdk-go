@@ -1,0 +1,14 @@
+{
+  "name": "recovery/gap-replay-basic",
+  "machine": "recovery",
+  "contract_version": "1.4.1",
+  "description": "A live gap on an idle channel triggers exactly one replay anchored at the gap's last_pos; a replay_complete with no mid-replay gap returns the channel to idle with no further action.",
+  "inputs": [
+    { "event": "gap", "channel": "acme.orders", "last_pos": "acme.orders:4" },
+    { "event": "replay_message", "channel": "acme.orders" },
+    { "event": "replay_complete", "channel": "acme.orders" }
+  ],
+  "expect": [
+    { "action": "send_replay", "channel": "acme.orders", "from_pos": "acme.orders:4" }
+  ]
+}
