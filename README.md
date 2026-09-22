@@ -7,7 +7,7 @@ market-data / event subscription for backend services, data pipelines, and edge 
   buffering, no silent drops.
 - **Full gap recovery** — reconnect-with-replay, advisory `gap` → live `replay`, and `history`.
 - **Automatic single-flight auth** — proactive + reactive token refresh, API-key → JWT escalation.
-- **WebSocket** transport (SSE is planned, not yet implemented), **REST publish**, **push** subscription management.
+- **WebSocket** transport (SSE is planned, not yet implemented — `WithTransport(TransportSSE)` returns `ErrSSENotImplemented` rather than silently falling back to WebSocket), **REST publish**, **push** subscription management.
 - **`context.Context`-driven** lifecycle, typed errors (`errors.Is`/`errors.As`), pull-based `Stats()`.
 - Built to the AsyncAPI v1.4.0 + gateway OpenAPI contracts.
 

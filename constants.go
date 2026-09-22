@@ -150,6 +150,8 @@ const (
 	TransportWebSocket TransportKind = "websocket"
 	// TransportSSE is the receive-only SSE transport: it subscribes via
 	// connect-time channels, publishes over REST, and cannot subscribe live.
+	// NOTE: not yet implemented — selecting it returns ErrSSENotImplemented (never a silent
+	// WebSocket fallback). Planned; tracked for parity with sukko-js / sukko-py.
 	TransportSSE TransportKind = "sse"
 )
 
