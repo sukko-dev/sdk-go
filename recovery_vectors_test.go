@@ -42,8 +42,19 @@ func runRecoveryVector(t *testing.T, s vectorScenario) []map[string]any {
 	// Per-channel recovery-frame counts — mirrors delivery.replayFrameCounts; the tick's
 	// accessor reads them so silence-suspension is scoped per channel (platform ADR-0025).
 	frames := map[string]int64{}
+	// parked/episodes mirror the delivery park state the owner snapshots — a { "backpressure" }
+	// input toggles parked and, on the false→true transition, opens a park episode. The FSM's
+	// deadline suspends while parked or when an episode opened during the window (platform ADR-0025).
+	parked := false
+	var episodes int64
 	tickNow := func() tick {
-		return tick{now: now, current: e, replayFrames: func(ch string) int64 { return frames[ch] }}
+		return tick{
+			now:          now,
+			current:      e,
+			parked:       parked,
+			episodes:     episodes,
+			replayFrames: func(ch string) int64 { return frames[ch] },
+		}
 	}
 
 	var out []map[string]any
@@ -59,6 +70,17 @@ func runRecoveryVector(t *testing.T, s vectorScenario) []map[string]any {
 	}
 
 	for _, in := range s.Inputs {
+		if bp, isBp := in["backpressure"]; isBp {
+			if bp.(bool) {
+				if !parked {
+					episodes++ // transition-only: a new back-pressure episode opened
+				}
+				parked = true
+			} else {
+				parked = false
+			}
+			continue
+		}
 		if ms, isAdvance := in["advance"]; isAdvance {
 			now = now.Add(time.Duration(ms.(float64) * float64(time.Millisecond)))
 			outcome := f.due(tickNow())

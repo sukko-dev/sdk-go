@@ -1,0 +1,18 @@
+{
+  "name": "recovery/paused-replay-no-interrupt",
+  "machine": "recovery",
+  "contract_version": "1.4.1",
+  "description": "A replay must NOT be interrupted while the consumer is backpressured: the deadline detects SERVER silence, not consumer speed (platform ADR-0025). The gap arms the deadline; the consumer stalls, and even though the full deadline window elapses with no recovery frame (advance past 10s), the deadline SUSPENDS because the silence is the consumer's, not the server's. On resume a replay_message arrives and the replay completes cleanly. Expected: exactly the one replay, no raise_recovery_interrupted.",
+  "inputs": [
+    { "event": "gap", "channel": "acme.orders", "last_pos": "acme.orders:4" },
+    { "backpressure": true },
+    { "advance": 11000 },
+    { "backpressure": false },
+    { "event": "replay_message", "channel": "acme.orders" },
+    { "advance": 6000 },
+    { "event": "replay_complete", "channel": "acme.orders" }
+  ],
+  "expect": [
+    { "action": "send_replay", "channel": "acme.orders", "from_pos": "acme.orders:4" }
+  ]
+}
