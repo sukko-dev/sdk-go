@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"runtime/debug"
+	"slices"
 	"sync"
 	"time"
 )
@@ -184,6 +185,13 @@ func (c *Client) run(connectCtx context.Context) {
 		}
 
 		wasFirst := !firstDialReported
+		// Snapshot the SSE channel set this dial is about to bake into the ?channels= URL, so a
+		// Subscribe/Unsubscribe that lands during the dial window (currentConn is nil then, so it
+		// schedules no bounce) is detected after connect and bounced (see the reconcile below).
+		var dialedChannels []string
+		if !c.transport.Capabilities().CanSubscribeLive {
+			dialedChannels = c.subs.desiredSnapshot()
+		}
 		conn, dialErr := c.acquireConn(connectCtx, wasFirst)
 
 		if dialErr != nil {
@@ -275,6 +283,16 @@ func (c *Client) run(connectCtx context.Context) {
 		// that THIS epoch backed up. Placed after the reconnect/resume sends, which are
 		// control frames and never fill the delivery channel.
 		episodesAtUp = c.delivery.parkEpisodes()
+
+		// SSE reconcile: a Subscribe/Unsubscribe that landed during the dial window changed the
+		// desired set after the ?channels= URL was built and while currentConn was still nil (so
+		// no bounce was scheduled). The just-opened epoch would stream the stale set, so bounce it
+		// immediately — close the conn (runEpoch ends at once) and redial with the current set.
+		// currentConn is live now, so any FURTHER change is handled by sseApplyDesired's own bounce.
+		if !c.transport.Capabilities().CanSubscribeLive && !slices.Equal(dialedChannels, c.subs.desiredSnapshot()) {
+			c.bouncePending.Store(true)
+			_ = conn.Close(closeCodeNormalClosure, "sukko: sse desired changed during dial")
+		}
 
 		out, rootStopped := c.runEpoch(conn)
 		hadEpoch = true // an epoch ran; the next successful connect is a reconnect
@@ -536,7 +554,12 @@ func (c *Client) runEpoch(conn Conn) (out terminationOutcome, rootStopped bool) 
 	}()
 	defer c.recoverEpoch(e, "decode")
 
-	e.wg.Go(func() { c.runHeartbeat(e, conn) })
+	// The heartbeat sends a client ping, so it is WebSocket-only. On receive-only SSE it
+	// cannot send (and liveness comes from server activity + the transport's idle watchdog),
+	// so it is not launched rather than left to fail on its first Send.
+	if c.transport.Capabilities().CanSubscribeLive {
+		e.wg.Go(func() { c.runHeartbeat(e, conn) })
+	}
 
 	for {
 		data, err := conn.Read(e.ctx)

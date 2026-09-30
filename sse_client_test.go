@@ -151,3 +151,91 @@ func TestSSEClient_PublishIsReceiveOnly(t *testing.T) {
 		t.Errorf("Subscriptions() = %v, want [a] (the connect-time desired set)", got)
 	}
 }
+
+func TestSSEClient_SubscribeDuringDialWindowIsNotLost(t *testing.T) {
+	var mu sync.Mutex
+	var connects [][]string
+	proceed := make(chan struct{})
+	gated := false
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		chans := strings.Split(r.URL.Query().Get("channels"), ",")
+		mu.Lock()
+		connects = append(connects, chans)
+		n := len(connects)
+		g := gated
+		mu.Unlock()
+		if n >= 2 && g {
+			<-proceed // block this connect BEFORE headers → the client's Open blocks (dial window)
+		}
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.WriteHeader(http.StatusOK)
+		if f, ok := w.(http.Flusher); ok {
+			_, _ = w.Write([]byte(": ka\n\n"))
+			f.Flush()
+		}
+		<-r.Context().Done()
+	}))
+	defer srv.Close()
+	s := &sseTestServer{Server: srv}
+	c := newSSEClient(t, s)
+	defer func() { _ = c.Close(context.Background()) }()
+
+	_ = c.Subscribe(context.Background(), []string{"a"})
+	if err := c.Connect(context.Background()); err != nil {
+		t.Fatalf("Connect: %v", err)
+	}
+	waitFor(t, func() bool { mu.Lock(); defer mu.Unlock(); return len(connects) >= 1 })
+
+	mu.Lock()
+	gated = true
+	mu.Unlock()
+	_ = c.Subscribe(context.Background(), []string{"b"}) // bounce → connect 2 starts, blocks in the dial window
+	waitFor(t, func() bool { mu.Lock(); defer mu.Unlock(); return len(connects) >= 2 })
+	_ = c.Subscribe(context.Background(), []string{"c"}) // lands DURING connect 2's dial window (currentConn nil)
+	mu.Lock()
+	gated = false
+	mu.Unlock()
+	close(proceed) // connect 2 completes with [a b]; the reconcile detects the mismatch and bounces
+
+	waitFor(t, func() bool { mu.Lock(); defer mu.Unlock(); return len(connects) >= 3 })
+	mu.Lock()
+	got := connects[2]
+	mu.Unlock()
+	if strings.Join(got, ",") != "a,b,c" {
+		t.Fatalf("connect 3 channels = %v, want [a b c] — a dial-window subscribe was lost", got)
+	}
+}
+
+func TestSSEClient_RefreshAndEscalateAreUnsupported(t *testing.T) {
+	s := newSSETestServer(t)
+	c := newSSEClient(t, s)
+	defer func() { _ = c.Close(context.Background()) }()
+	_ = c.Subscribe(context.Background(), []string{"a"})
+	if err := c.Connect(context.Background()); err != nil {
+		t.Fatalf("Connect: %v", err)
+	}
+	waitConnects(t, s, 1)
+
+	if err := c.RefreshToken(context.Background()); !errors.Is(err, ErrUnsupportedByTransport) {
+		t.Errorf("RefreshToken over SSE = %v, want ErrUnsupportedByTransport", err)
+	}
+	if err := c.Escalate(context.Background(), "jwt"); !errors.Is(err, ErrUnsupportedByTransport) {
+		t.Errorf("Escalate over SSE = %v, want ErrUnsupportedByTransport", err)
+	}
+	if p := c.PendingSubscriptions(); len(p) != 0 {
+		t.Errorf("PendingSubscriptions() over SSE = %v, want empty (nothing is pending; desired IS subscribed)", p)
+	}
+}
+
+// waitFor polls cond until true or a 3s deadline.
+func waitFor(t *testing.T, cond func() bool) {
+	t.Helper()
+	deadline := time.Now().Add(3 * time.Second)
+	for time.Now().Before(deadline) {
+		if cond() {
+			return
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	t.Fatal("waitFor: condition not met within 3s")
+}

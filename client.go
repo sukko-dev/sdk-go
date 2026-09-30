@@ -416,6 +416,11 @@ func (c *Client) RefreshToken(ctx context.Context) error {
 	if err := ctx.Err(); err != nil {
 		return fmt.Errorf("sukko: refresh token: %w", err)
 	}
+	if !c.transport.Capabilities().CanRefreshInPlace {
+		// SSE cannot send an auth frame on a live stream — UpdateToken then let the next
+		// (re)dial carry the new credential, or bounce via Subscribe/Unsubscribe.
+		return fmt.Errorf("sukko: RefreshToken over SSE: %w", ErrUnsupportedByTransport)
+	}
 	c.mu.Lock()
 	state := c.state
 	closed := c.closed
@@ -447,6 +452,11 @@ func (c *Client) RefreshToken(ctx context.Context) error {
 func (c *Client) Escalate(ctx context.Context, jwt string) error {
 	if err := ctx.Err(); err != nil {
 		return fmt.Errorf("sukko: escalate: %w", err)
+	}
+	if !c.transport.Capabilities().CanRefreshInPlace {
+		// SSE cannot send an auth frame on a live stream — UpdateToken then bounce via
+		// Subscribe/Unsubscribe so the redial carries the escalated credential.
+		return fmt.Errorf("sukko: Escalate over SSE: %w", ErrUnsupportedByTransport)
 	}
 	if jwt == "" {
 		return ErrEmptyToken
@@ -601,7 +611,15 @@ func (c *Client) Subscriptions() []string {
 // PendingSubscriptions returns the requested-but-not-yet-granted set:
 // channels a Subscribe asked for that are not (yet) granted — covering both a
 // Subscribe issued while disconnected and the post-ack denial delta.
-func (c *Client) PendingSubscriptions() []string { return c.subs.pendingSnapshot() }
+func (c *Client) PendingSubscriptions() []string {
+	// SSE has no subscription_ack, so nothing is ever "pending" — the desired set is the
+	// subscription (reported by Subscriptions()). Returning it here too would show every channel
+	// as simultaneously subscribed and pending.
+	if !c.transport.Capabilities().CanSubscribeLive {
+		return nil
+	}
+	return c.subs.pendingSnapshot()
+}
 
 // History requests up to limit historical records for a channel. They arrive
 // in-band as *Message events with Source SourceHistory, terminated by a
