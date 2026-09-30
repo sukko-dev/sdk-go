@@ -141,7 +141,11 @@ func (c *Client) run(connectCtx context.Context) {
 	var episodesAtUp int64
 
 	for {
-		if firstDialReported {
+		// A deliberate SSE bounce (a Subscribe/Unsubscribe closed the epoch to apply a new
+		// channel set) redials IMMEDIATELY — no backoff — and is not counted as a reconnect
+		// below. Swap clears the flag so it applies to exactly this one redial.
+		bounceThisDial := c.bouncePending.Swap(false)
+		if firstDialReported && !bounceThisDial {
 			// Reconnect: wait out the backoff (or the server's Retry-After
 			// override), then dial. Root cancellation during the wait is a clean
 			// stop.
@@ -160,6 +164,23 @@ func (c *Client) run(connectCtx context.Context) {
 				return
 			}
 			attempt++
+		}
+
+		// SSE park (ADR-0014): never dial an empty ?channels= — the gateway 400s it. On a
+		// RECONNECT with an empty desired set (an unsubscribe-all), wait for a Subscribe to
+		// repopulate it. Re-check on every wake: desiredChanged fires on ANY subscribe/unsubscribe,
+		// not only repopulating ones, so a stray wake must not fall through to dial empty. The
+		// FIRST dial with an empty set is a caller error, left to surface as the dial's
+		// HandshakeError. WebSocket never parks (CanSubscribeLive; its dial takes no channels).
+		if firstDialReported && !c.transport.Capabilities().CanSubscribeLive {
+			for len(c.subs.desiredSnapshot()) == 0 {
+				select {
+				case <-c.desiredChanged:
+				case <-c.rootCtx.Done():
+					c.transition(c.stopTrigger())
+					return
+				}
+			}
 		}
 
 		wasFirst := !firstDialReported
@@ -199,7 +220,9 @@ func (c *Client) run(connectCtx context.Context) {
 		// death cannot leak an open window into an epoch that sends no reconnect. It is
 		// set before runEpoch (the decode loop, same goroutine) reads it.
 		sentReconnect := false
-		if hadEpoch {
+		// SSE recovery is transport-internal (the Last-Event-ID header, not a wire frame), and
+		// SSE cannot send frames anyway — so the reconnect{last_pos} probe is WebSocket-only.
+		if hadEpoch && c.transport.Capabilities().CanSubscribeLive {
 			sentReconnect = c.sendReconnect(conn)
 		}
 		c.replayWin.set(sentReconnect)
@@ -219,12 +242,13 @@ func (c *Client) run(connectCtx context.Context) {
 		attempt = 0
 		override = nil
 		c.transition(triggerHandshakeOK) // connecting/reconnecting → connected
-		if hadEpoch {
+		if hadEpoch && !bounceThisDial {
 			// A prior epoch ran, so this successful handshake re-established the
 			// connection — a reconnect. Counted here, past the clean-stop check
 			// above, so a Close landing as the dial completes is not miscounted; gated on
 			// hadEpoch to match the reconnect-frame gate, so a first connection after a
-			// failed first dial (hadEpoch still false) is not a reconnect.
+			// failed first dial (hadEpoch still false) is not a reconnect. A deliberate SSE
+			// bounce (bounceThisDial) is a caller-initiated resubscribe, not a reconnect.
 			c.counters.reconnects.Add(1)
 		}
 		if wasFirst {
@@ -240,7 +264,11 @@ func (c *Client) run(connectCtx context.Context) {
 		// Re-subscribe the desired set on the new epoch: the reset cleared granted,
 		// so the resume covers the whole desired set. Sent after upAuthOwner
 		// so auth (if any) leads, though the serializer and auth-owner are independent.
-		c.resumeSubscribeSerializer()
+		// WebSocket only — SSE carries its channel set in the dial URL, so there is no
+		// resume frame to send (and its receive-only conn could not send one).
+		if c.transport.Capabilities().CanSubscribeLive {
+			c.resumeSubscribeSerializer()
+		}
 
 		// Snapshot the back-pressure episode count at the handshake, before any of this
 		// epoch's data is delivered — a later increase (or a still-parked send) witnesses

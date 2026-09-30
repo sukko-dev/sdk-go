@@ -173,6 +173,20 @@ func (s *subState) grantedSnapshot() []string {
 	return out
 }
 
+// desiredSnapshot returns the desired set, sorted. On SSE the desired set IS the
+// subscription (no ack/granted distinction), so this is what the SSE transport dials in
+// the ?channels= URL and what Subscriptions() reports for a receive-only transport.
+func (s *subState) desiredSnapshot() []string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	out := make([]string, 0, len(s.desired))
+	for ch := range s.desired {
+		out = append(out, ch)
+	}
+	slices.Sort(out)
+	return out
+}
+
 // pendingSnapshot returns desired − granted, sorted (PendingSubscriptions()).
 func (s *subState) pendingSnapshot() []string {
 	s.mu.Lock()

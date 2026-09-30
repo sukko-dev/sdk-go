@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"slices"
 	"sync"
+	"sync/atomic"
 )
 
 // Client is a connection to the Sukko platform. It is single-use: after Close
@@ -117,6 +118,12 @@ type Client struct {
 	// before the send and clears it on release; the decode loop reads it to
 	// reconcile an ack in receive order.
 	subFlight subFlight
+	// SSE subscribe/unsubscribe bounce (ADR-0014/0015). desiredChanged wakes a supervisor
+	// parked on an empty SSE desired set (buffered(1)); bouncePending marks that the current
+	// epoch was closed deliberately by a subscribe/unsubscribe so the redial is immediate — no
+	// backoff, not counted as a reconnect. Both are inert on WebSocket (which subscribes live).
+	desiredChanged chan struct{}
+	bouncePending  atomic.Bool
 	// doneCh is closed by terminalSequence when teardown is complete.
 	doneCh chan struct{}
 	// terminalOnce guards the whole terminal sequence: it runs once whether the
@@ -193,7 +200,6 @@ func NewClient(ctx context.Context, url string, opts ...Option) (*Client, error)
 		cfg:             cfg,
 		url:             url,
 		clock:           cfg.clock,
-		transport:       newWSTransport(url, cfg, credentials),
 		delivery:        newDelivery(cfg.queueSize, cfg.clock, counters),
 		counters:        counters,
 		creds:           creds,
@@ -221,6 +227,24 @@ func NewClient(ctx context.Context, url string, opts ...Option) (*Client, error)
 		flightMode:      AuthRefresh, // the initial/handshake auth is a refresh; escalation sets it explicitly
 		state:           StateDisconnected,
 	}
+
+	// Select the transport. SSE reads its connect-time channel set from the desired
+	// subscriptions (mutated caller-side, ADR-0014) and dials the HTTP origin of the ws:// URL;
+	// its cursor rides on the transport across epochs. WebSocket subscribes live.
+	switch cfg.transport {
+	case TransportSSE:
+		base, berr := restBaseURL(url)
+		if berr != nil {
+			return nil, fmt.Errorf("sukko: sse base url: %w", berr)
+		}
+		c.transport = newSSETransport(base, cfg, credentials, c.subs.desiredSnapshot)
+	default:
+		c.transport = newWSTransport(url, cfg, credentials)
+	}
+	// desiredChanged wakes a supervisor parked on an empty SSE desired set (buffered so a
+	// subscribe never blocks on it); bouncePending marks a deliberate SSE bounce so the redial
+	// is immediate (no backoff, not counted as a reconnect).
+	c.desiredChanged = make(chan struct{}, 1)
 
 	// Canceling the client-lifetime context tears the client down like Close.
 	// When a supervisor is running it already watches rootCtx (via the epoch
@@ -483,6 +507,9 @@ func (c *Client) UpdateToken(token string) error {
 // ErrSubscribeQueueFull; a closed client returns ErrClosed. The grant outcome
 // arrives in-band as *SubscriptionResult.
 func (c *Client) Subscribe(ctx context.Context, channels []string) error {
+	if !c.transport.Capabilities().CanSubscribeLive {
+		return c.sseApplyDesired(ctx, "subscribe", slices.Clone(channels), true)
+	}
 	return c.enqueueSubReq(ctx, "subscribe", subReq{kind: reqSubscribe, channels: slices.Clone(channels)})
 }
 
@@ -492,7 +519,50 @@ func (c *Client) Subscribe(ctx context.Context, channels []string) error {
 // currently granted (a never-granted channel is pruned locally with no wire
 // traffic).
 func (c *Client) Unsubscribe(ctx context.Context, channels []string) error {
+	if !c.transport.Capabilities().CanSubscribeLive {
+		return c.sseApplyDesired(ctx, "unsubscribe", slices.Clone(channels), false)
+	}
 	return c.enqueueSubReq(ctx, "unsubscribe", subReq{kind: reqUnsubscribe, channels: slices.Clone(channels)})
+}
+
+// sseApplyDesired applies a Subscribe/Unsubscribe on the receive-only SSE transport. SSE cannot
+// send a subscription frame, so the desired set is mutated caller-side (ADR-0014 — subState is
+// mutex-guarded, safe to write here) and the live stream is bounced: closing the conn ends the
+// epoch and the supervisor redials with the new channel set, resuming lost messages via
+// Last-Event-ID (ADR-0015). The bounce is marked deliberate so the redial is immediate (no
+// backoff, not counted as a reconnect). When no stream is live the set is only recorded — a
+// Subscribe never auto-connects; Connect is explicit.
+func (c *Client) sseApplyDesired(ctx context.Context, op string, channels []string, add bool) error {
+	if err := ctx.Err(); err != nil {
+		return fmt.Errorf("sukko: %s: %w", op, err)
+	}
+	if len(channels) == 0 {
+		return nil
+	}
+	c.mu.Lock()
+	closed := c.closed || c.state == StateClosed || c.state == StateError
+	c.mu.Unlock()
+	if closed {
+		return ErrClosed
+	}
+	if add {
+		c.subs.addDesired(channels)
+	} else {
+		c.subs.remove(channels)
+	}
+	// Wake a supervisor parked on an empty desired set (buffered, non-blocking).
+	select {
+	case c.desiredChanged <- struct{}{}:
+	default:
+	}
+	// Bounce a live stream so the redial picks up the new set. Idempotent Close; a stale conn
+	// (the epoch ended concurrently) is a no-op close, and bouncePending simply makes the next
+	// redial immediate, which is harmless.
+	if conn := c.currentConn(); conn != nil {
+		c.bouncePending.Store(true)
+		_ = conn.Close(closeCodeNormalClosure, "sukko: sse resubscribe")
+	}
+	return nil
 }
 
 // enqueueSubReq is the shared enqueue path for Subscribe/Unsubscribe.
@@ -519,7 +589,14 @@ func (c *Client) enqueueSubReq(ctx context.Context, op string, req subReq) error
 
 // Subscriptions returns the granted set — the channels the client is actually
 // receiving — as full tenant-prefixed strings.
-func (c *Client) Subscriptions() []string { return c.subs.grantedSnapshot() }
+func (c *Client) Subscriptions() []string {
+	// SSE has no subscription_ack, so the desired set IS the subscription (the connect-time
+	// channels); WebSocket reports the ack-confirmed granted set.
+	if !c.transport.Capabilities().CanSubscribeLive {
+		return c.subs.desiredSnapshot()
+	}
+	return c.subs.grantedSnapshot()
+}
 
 // PendingSubscriptions returns the requested-but-not-yet-granted set:
 // channels a Subscribe asked for that are not (yet) granted — covering both a

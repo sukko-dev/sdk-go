@@ -24,6 +24,10 @@ func (c *Client) Publish(ctx context.Context, channel string, data any) error {
 	if err := ctx.Err(); err != nil {
 		return fmt.Errorf("sukko: publish: %w", err)
 	}
+	if !c.transport.Capabilities().CanPublish {
+		// SSE is receive-only — publish over REST instead.
+		return fmt.Errorf("sukko: Publish over SSE: %w", ErrUnsupportedByTransport)
+	}
 	payload, err := c.prepublishCheck(data)
 	if err != nil {
 		return err
