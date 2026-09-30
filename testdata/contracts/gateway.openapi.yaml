@@ -2,7 +2,7 @@ openapi: 3.1.0
 
 info:
   title: Sukko Gateway API
-  version: 1.0.0
+  version: 1.0.2
   description: |
     REST API for the Sukko WebSocket Gateway. Provides SSE streaming, REST publish,
     push notification management, and operational endpoints.
@@ -217,6 +217,11 @@ paths:
                 $ref: "#/components/schemas/Error"
         "429":
           description: Tenant connection limit exceeded
+          headers:
+            Retry-After:
+              schema:
+                type: integer
+              description: Seconds to wait before retrying
           content:
             application/json:
               schema:
@@ -224,6 +229,15 @@ paths:
               example:
                 code: TENANT_LIMIT_EXCEEDED
                 message: "tenant connection limit exceeded"
+        "503":
+          description: Service unavailable — tenant resolution temporarily unavailable (pre-upgrade). Retry with backoff.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              example:
+                code: SERVICE_UNAVAILABLE
+                message: "tenant resolution temporarily unavailable"
 
   # ── SSE (Pro) ──────────────────────────────────────────────────────
   /sse:
@@ -237,13 +251,24 @@ paths:
 
         **Event format**:
         ```
-        id: {sequence}
+        id: v1:eyJzdWtrby5CVEMudHJhZGUiOiIyLTUifQ
         event: message
-        data: {"type":"message","seq":1,"ts":1706000000000,"channel":"sukko.BTC.trade","data":{...},"mid":"4f8a2e6b0c9d1735-0-1"}
+        data: {"type":"message","seq":1,"ts":1706000000000,"channel":"sukko.BTC.trade","data":{...},"pos":"2-5","mid":"4f8a2e6b0c9d1735-0-1"}
         ```
 
         Keepalive comments (`: keepalive`) are sent periodically to keep the connection alive.
-        Supports `Last-Event-ID` header for reconnection.
+
+        **Reconnection (`Last-Event-ID`)**: the `id:` is an opaque, versioned cursor
+        (a `v1:`-prefixed encoding of the last position per subscribed channel), emitted
+        at a bounded cadence — not on every message. On reconnect, resend the last id you
+        received in the `Last-Event-ID` header (EventSource does this automatically); the
+        server replays the messages missed since that cursor for each channel you are
+        authorized for, interleaved with live delivery. Replayed and live messages share
+        their `mid` (a stable identity) and are ordered by `pos`, so a client deduplicates
+        the boundary by `mid`, exactly as for WebSocket reconnect. Recovery requires the
+        Kafka message backend; on the direct backend, or with an absent/foreign/unparseable
+        cursor, the stream serves live-only. A stale cursor simply replays a few extra
+        (deduplicated) messages.
       tags: [SSE]
       security:
         - bearerToken: []
@@ -269,6 +294,13 @@ paths:
           schema:
             type: string
           description: API key
+        - name: Last-Event-ID
+          in: header
+          required: false
+          schema:
+            type: string
+          description: "Opaque reconnect cursor — a `v1:` token from a prior event's `id:`. When present and valid, the server replays messages missed since the cursor for the authorized channels, interleaved with live delivery (deduplicate by `mid`). Ignored on the direct backend or if absent/foreign/unparseable (live-only)."
+          example: "v1:eyJzdWtrby5CVEMudHJhZGUiOiIyLTUifQ"
       responses:
         "200":
           description: SSE event stream
@@ -299,6 +331,11 @@ paths:
                 $ref: "#/components/schemas/Error"
         "429":
           description: Tenant connection limit exceeded
+          headers:
+            Retry-After:
+              schema:
+                type: integer
+              description: Seconds to wait before retrying
           content:
             application/json:
               schema:
@@ -347,8 +384,7 @@ paths:
                   description: "Target channel. Format: {tenant}.{suffix}"
                   example: "sukko.general.messages"
                 data:
-                  type: object
-                  description: Arbitrary JSON payload
+                  description: Arbitrary JSON payload (any JSON value — object, array, string, number, or boolean).
                   example: { "text": "Hello everyone!", "sender": "user123" }
       responses:
         "200":
@@ -368,8 +404,9 @@ paths:
                     description: >
                       Stable message identity assigned to the published message — the same `mid`
                       subscribers receive on the delivered envelope. Opaque, at most 64 characters.
-                      Omitted when the publish fans out to multiple topics (one publish then
-                      produces multiple messages, each with its own mid).
+                      In kafka mode it is the ingress record's identity and is present whether or
+                      not the matched routing rule also writes egress copies (egress copies carry
+                      no delivery identity).
               example:
                 status: "accepted"
                 channel: "sukko.general.messages"
@@ -432,6 +469,11 @@ paths:
                 message: "request body exceeds maximum publish size"
         "429":
           description: Rate limited
+          headers:
+            Retry-After:
+              schema:
+                type: integer
+              description: Seconds to wait before retrying
           content:
             application/json:
               schema:
@@ -451,6 +493,15 @@ paths:
               example:
                 code: SERVICE_UNAVAILABLE
                 message: "publish temporarily unavailable, retry"
+        "500":
+          description: Internal error — an unmapped failure from the ws-server publish RPC.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              example:
+                code: INTERNAL_ERROR
+                message: "internal error"
 
   # ── Push Subscribe (Pro) ───────────────────────────────────────────
   /api/v1/push/subscribe:
@@ -544,6 +595,24 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Error"
+        "413":
+          description: Request body too large
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              example:
+                code: BODY_TOO_LARGE
+                message: "request body exceeds maximum size"
+        "500":
+          description: Internal error — an unmapped failure from the push service.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              example:
+                code: INTERNAL_ERROR
+                message: "internal error"
         "503":
           description: Push service not available
           content:
@@ -603,11 +672,22 @@ paths:
               schema:
                 $ref: "#/components/schemas/Error"
         "403":
-          description: Edition gate — requires Pro (Web Push)
+          description: |
+            Edition gate — requires Pro (Web Push) — or `FORBIDDEN` when the request is
+            authenticated with an API key: push unsubscribe requires JWT authentication.
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/Error"
+        "500":
+          description: Internal error — an unmapped failure from the push service.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              example:
+                code: INTERNAL_ERROR
+                message: "internal error"
         "503":
           description: Push service not available
           content:

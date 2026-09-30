@@ -148,10 +148,10 @@ const (
 	// TransportWebSocket is the bidirectional WebSocket transport, and the
 	// default NewClient applies when no transport option is given.
 	TransportWebSocket TransportKind = "websocket"
-	// TransportSSE is the receive-only SSE transport: it subscribes via
-	// connect-time channels, publishes over REST, and cannot subscribe live.
-	// NOTE: not yet implemented — selecting it returns ErrSSENotImplemented (never a silent
-	// WebSocket fallback). Planned; tracked for parity with sukko-js / sukko-py.
+	// TransportSSE is the receive-only SSE transport: it subscribes via connect-time
+	// channels (subscribe/unsubscribe bounce the stream), publishes over REST, cannot
+	// subscribe live, and resumes lost messages on reconnect via the opaque Last-Event-ID
+	// cursor (ADR-0015). Parity with sukko-js / sukko-py.
 	TransportSSE TransportKind = "sse"
 )
 
