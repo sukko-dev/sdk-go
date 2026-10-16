@@ -54,6 +54,13 @@ const (
 	typeHistoryComplete   = "history_complete"
 	typeHistoryError      = "history_error"
 	typeReplayComplete    = "replay_complete"
+
+	// SSE-only reconnect-recovery control frames (gateway.openapi 1.0.3). The server emits these
+	// only on the SSE path, so they are in gateway.openapi, not the WS AsyncAPI this SDK derives
+	// from — deliberately NOT in decodeRegistry (the conformance test guards registry⇄contract).
+	// They are intercepted in dispatch before the UnknownEvent path (ADR-0016).
+	typeNoReplay        = "no_replay"
+	typeReplayTruncated = "replay_truncated"
 )
 
 // ─── client → server ───
@@ -481,6 +488,18 @@ func decodeFrame(data []byte) (decoded any, unknownType string, err error) {
 		}
 	}
 	return target, "", nil
+}
+
+// decodeNoReplayChannels extracts the channels from an SSE no_replay control frame (gateway.openapi
+// 1.0.3). It is intentionally NOT a decodeRegistry entry — no_replay is an SSE frame, not a WS
+// AsyncAPI member, so it must not take part in the registry⇄contract conformance check. A malformed
+// payload yields nil, which the caller treats as nothing to surface.
+func decodeNoReplayChannels(data []byte) []string {
+	var f struct {
+		Channels []string `json:"channels"`
+	}
+	_ = json.Unmarshal(data, &f) // malformed → nil channels → nothing surfaced
+	return f.Channels
 }
 
 // classifyErrorFrame turns a generic error frame into a typed error.

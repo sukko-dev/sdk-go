@@ -158,10 +158,16 @@ func (e *EditionRequiredError) Is(target error) bool { return target == ErrEditi
 // Recovery kinds name which recovery a *RecoveryInterruptedError describes. They
 // are the single source of the strings, referenced instead of literals (§I).
 const (
-	// RecoveryKindReplay is a live gap→replay (or reconnect-replay) window.
+	// RecoveryKindReplay is a live gap→replay (or WS reconnect-replay) window — always
+	// channel-scoped and client-detected (a deadline or a mid-recovery disconnect).
 	RecoveryKindReplay = "replay"
 	// RecoveryKindHistory is a History request window.
 	RecoveryKindHistory = "history"
+	// RecoveryKindReconnectReplay is an SSE reconnect-replay window (resumed via Last-Event-ID)
+	// that the server reported truncated at its cap. Connection-level, so Channel is empty — the
+	// server-reported SSE analog of RecoveryKindReplay, distinct so a caller can tell them apart
+	// (ADR-0016).
+	RecoveryKindReconnectReplay = "reconnect_replay"
 )
 
 // RecoveryInterruptedError reports a recovery that ended without its terminator
@@ -169,14 +175,18 @@ const (
 // an epoch ending. It exists so a truncated recovery is never surfaced as a bare
 // disconnect, which would leave the caller believing the window completed.
 type RecoveryInterruptedError struct {
-	// Kind is the recovery that was interrupted: RecoveryKindReplay or
-	// RecoveryKindHistory.
+	// Kind is the recovery that was interrupted: RecoveryKindReplay, RecoveryKindHistory,
+	// or RecoveryKindReconnectReplay.
 	Kind string
-	// Channel is the affected channel.
+	// Channel is the affected channel, or empty for a connection-level interrupt
+	// (RecoveryKindReconnectReplay — the whole SSE reconnect replay was truncated).
 	Channel string
 }
 
 func (e *RecoveryInterruptedError) Error() string {
+	if e.Channel == "" {
+		return fmt.Sprintf("sukko: %s recovery interrupted", e.Kind)
+	}
 	return fmt.Sprintf("sukko: %s recovery interrupted on channel %s", e.Kind, e.Channel)
 }
 

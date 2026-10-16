@@ -733,6 +733,13 @@ func (c *Client) dispatch(e *epoch, data []byte) {
 		return
 	}
 	if unknown != "" {
+		// SSE-only reconnect-recovery control frames (gateway.openapi 1.0.3, ADR-0016) decode to
+		// "unknown" because they are deliberately absent from decodeRegistry (SSE frames, not WS
+		// AsyncAPI members). Intercept them here, before the UnknownEvent path, so they neither
+		// surface as UnknownEvent nor inflate the unknown-events counter.
+		if c.handleSSEControlFrame(unknown, data) {
+			return
+		}
 		c.counters.unknownEvents.Add(1)
 		c.forward(e.ctx, &UnknownEvent{Type: unknown, Raw: bytes.Clone(data)})
 		return
@@ -904,6 +911,41 @@ func (c *Client) dispatch(e *epoch, data []byte) {
 				c.counters.possibleGaps.Add(1)
 			}
 		}
+	}
+}
+
+// handleSSEControlFrame translates the SSE-only reconnect-recovery control frames (no_replay /
+// replay_truncated, gateway.openapi 1.0.3, ADR-0016) onto existing surfaces. They are SSE frames,
+// not WS AsyncAPI members, so they are intentionally absent from decodeRegistry and are intercepted
+// in dispatch before the UnknownEvent path. Returns true when typ was one of them (handled).
+//
+// Both are routed root-scoped (delivery.send with rootCtx for BOTH slots, like surface): each is a
+// permanently-unrecoverable, once-only loss report — the cursor has advanced past the hole — so it
+// must survive epoch teardown rather than be discarded if the send parks during a drop.
+func (c *Client) handleSSEControlFrame(typ string, data []byte) bool {
+	switch typ {
+	case typeNoReplay:
+		// This SDK's SSE recovery is OPTIMISTIC: it emits no blanket *PossibleGap on reconnect (the
+		// granted set is populated only by the WS subscription_ack path, so on SSE it stays empty and
+		// the coalesced-PossibleGap snapshot unions nothing). So the server's no_replay is the ONLY
+		// signal that these cursor channels went unrecovered — surface one *PossibleGap carrying them,
+		// closing a pre-slice-3b silent-loss window (ADR-0016). This mirrors sukko-py, not sukko-js.
+		channels := decodeNoReplayChannels(data)
+		if len(channels) > 0 &&
+			c.delivery.send(c.rootCtx, c.rootCtx, &PossibleGap{Channels: channels}) == notDiscarded {
+			c.counters.possibleGaps.Add(1)
+		}
+		return true
+	case typeReplayTruncated:
+		// The reconnect replay was cut short at the server cap — a connection-level truncated
+		// recovery. Surface it on the existing *RecoveryInterruptedError surface (empty Channel =
+		// connection-level), the three-SDK truncation-signal parity. The server's replayed count is
+		// informational and intentionally not carried: the actionable signal is the truncation, like
+		// Centrifugo `recovered:false` / Ably `resumed:false`.
+		c.delivery.send(c.rootCtx, c.rootCtx, &RecoveryInterruptedError{Kind: RecoveryKindReconnectReplay})
+		return true
+	default:
+		return false
 	}
 }
 
