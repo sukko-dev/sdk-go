@@ -1,7 +1,8 @@
 # sdk-go
 
-Go client SDK for the [Sukko](https://github.com/sukko-dev/sukko) real-time platform — real-time
-market-data / event subscription for backend services, data pipelines, and edge consumers.
+Go client SDK for [Sukko](https://github.com/sukko-dev/sukko) — realtime infrastructure proven
+correct under failure, deployed in your own cloud. Real-time market-data / event subscription for
+backend services, data pipelines, and edge consumers.
 
 - **Channel + iterator delivery** with inherent back-pressure — a bounded stream, no unbounded
   buffering, no silent drops.
