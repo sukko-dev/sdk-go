@@ -1,0 +1,51 @@
+name: Live E2E
+
+# ADR-0040 Tier2 (live): drives the real Go client against the LATEST RELEASED platform —
+# the published GHCR images, verified by the committed prod-signed Community license, kafka
+# backend. Docker-heavy (image pulls + a booted stack) and driven by PLATFORM releases, which
+# a sdk-go pull_request never sees — so it runs nightly and on demand, NOT on every PR; a PR
+# labeled `run-e2e` opts in. The fast gate (build + vet + unit tests + lint) excludes it.
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "0 6 * * *" # ~06:00 UTC daily, against the latest released images
+  pull_request:
+    types: [opened, synchronize, reopened, labeled]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: sdk-go-e2e-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  e2e:
+    name: Live (released, kafka)
+    # On a PR, run only when explicitly labeled `run-e2e`; dispatch and the nightly always run.
+    if: github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'run-e2e')
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout sdk-go
+        uses: actions/checkout@v4
+
+      # e2e/run.sh builds the sukko CLI (the fixture tool that mints the ES256 client token)
+      # from a checkout it resolves at .sources/cli. Public repo — no token.
+      - name: Checkout sukko CLI
+        uses: actions/checkout@v4
+        with:
+          repository: sukko-dev/cli
+          path: .sources/cli
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: go.sum
+
+      # ubuntu-latest ships Docker. run.sh pulls the latest released images, boots a Community
+      # kafka stack with the committed Community key, provisions a fixture via the CLI, runs the
+      # live suite (go test -race -tags e2e), and tears the stack down.
+      - name: Run live e2e
+        run: bash e2e/run.sh
