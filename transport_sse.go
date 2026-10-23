@@ -124,25 +124,66 @@ func (t *sseTransport) buildURL() (string, http.Header, error) {
 // Open dials the SSE stream. A non-200 is surfaced as a typed *HandshakeError (the
 // Pro gate's 403 EDITION_LIMIT included); success returns an sseConn whose idle
 // watchdog is already running.
+//
+// ctx bounds the DIAL only, per the Transport contract — the supervisor cancels it
+// the moment Open returns (its connect deadline / dial timer scope), exactly as it
+// does for the WebSocket transport, where coder/websocket's Dial scopes ctx to the
+// handshake. net/http is different: a request's context governs the response BODY
+// for its whole life, so binding the stream to ctx would kill it on the first Read
+// ("context canceled", surfaced as a local 1006) and loop the supervisor through
+// reconnect forever on a healthy-but-silent stream. The stream therefore runs on its
+// own context, canceled by Close; the dial ctx aborts it only while Do is in flight.
+// (The caller's http.Client must likewise carry no Timeout — it would cap the stream.)
 func (t *sseTransport) Open(ctx context.Context) (Conn, error) {
 	dialURL, header, err := t.buildURL()
 	if err != nil {
 		return nil, err
 	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, dialURL, http.NoBody)
+	// The stream's own lifetime: detached from the dial ctx's cancellation, canceled by
+	// Close. AfterFunc propagates a dial-ctx cancel while the handshake is in flight.
+	streamCtx, streamCancel := context.WithCancel(context.WithoutCancel(ctx))
+	stopPropagate := context.AfterFunc(ctx, streamCancel)
+
+	req, err := http.NewRequestWithContext(streamCtx, http.MethodGet, dialURL, http.NoBody)
 	if err != nil {
+		stopPropagate()
+		streamCancel()
 		return nil, fmt.Errorf("sukko: sse request: %w", err)
 	}
 	req.Header = header
 	req.Header.Set("Accept", "text/event-stream")
 
 	resp, err := t.httpClient.Do(req)
+	// From here the dial ctx no longer reaches the stream. stopPropagate reports false
+	// when the dial ctx already fired (streamCancel ran or is running): the stream is
+	// dead or dying. Check this FIRST, for either outcome of Do, so a dial-ctx deadline
+	// surfaces as ctx.Err() (context.DeadlineExceeded) — matching the WebSocket transport —
+	// rather than the "context canceled" that streamCancel induced on resp's body.
+	dialLive := stopPropagate()
+	if !dialLive {
+		if resp != nil {
+			_ = resp.Body.Close()
+		}
+		streamCancel()
+		return nil, fmt.Errorf("sukko: sse dial: %w", ctx.Err())
+	}
 	if err != nil {
+		streamCancel()
 		return nil, fmt.Errorf("sukko: sse dial: %w", err)
 	}
 	if resp.StatusCode != http.StatusOK {
+		// handshakeErrorFromResponse reads the error body, which rides on streamCtx —
+		// the context stopPropagate() just detached from the dial ctx. A stalled non-200
+		// body (chunked, never EOF — a proxy/LB error page) would therefore hang Open with
+		// nothing able to abort it. Re-arm a close-on-cancel guard so the dial ctx still
+		// bounds the read (as coder/websocket does for its non-101 body), then surface the
+		// *HandshakeError with its real status. The supervisor classifies on Status, so an
+		// aborted read (empty Code) still carries the 403 — never masked as a dial timeout.
+		stopRead := context.AfterFunc(ctx, func() { _ = resp.Body.Close() })
 		he := handshakeErrorFromResponse(resp, t.clock.Now())
+		stopRead()
 		_ = resp.Body.Close()
+		streamCancel()
 		return nil, he
 	}
 
@@ -151,6 +192,7 @@ func (t *sseTransport) Open(ctx context.Context) (Conn, error) {
 	c := &sseConn{
 		transport: t,
 		resp:      resp,
+		cancel:    streamCancel,
 		scanner:   sc,
 		done:      make(chan struct{}),
 		activity:  make(chan struct{}, 1),
@@ -163,6 +205,7 @@ func (t *sseTransport) Open(ctx context.Context) (Conn, error) {
 type sseConn struct {
 	transport *sseTransport
 	resp      *http.Response
+	cancel    context.CancelFunc // ends the stream's own context (see Open); called by Close
 	scanner   *bufio.Scanner
 	closeOnce sync.Once
 	done      chan struct{} // closed on Close; stops the watchdog
@@ -267,7 +310,8 @@ func (c *sseConn) Send(context.Context, []byte) error {
 	return ErrUnsupportedByTransport
 }
 
-// Close stops the watchdog and closes the response body, exactly once.
+// Close stops the watchdog, closes the response body, and ends the stream's
+// context, exactly once.
 func (c *sseConn) Close(int, string) error {
 	var err error
 	c.closeOnce.Do(func() {
@@ -275,6 +319,7 @@ func (c *sseConn) Close(int, string) error {
 		if e := c.resp.Body.Close(); e != nil {
 			err = fmt.Errorf("sukko: sse close: %w", e)
 		}
+		c.cancel()
 	})
 	return err
 }

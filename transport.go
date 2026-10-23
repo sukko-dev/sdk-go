@@ -8,6 +8,12 @@ import "context"
 type Transport interface {
 	// Open dials and completes the handshake, returning a live connection. A
 	// handshake that is not a successful upgrade returns a *HandshakeError.
+	//
+	// ctx bounds the DIAL ONLY: the supervisor cancels it as soon as Open returns
+	// (it is the connect deadline / reconnect dial-timer scope). The returned Conn
+	// must outlive it — its lifetime ends with Close or the Read ctx, never with
+	// the dial ctx. A transport whose underlying library ties the connection to the
+	// request context (net/http streams do) must detach it itself.
 	Open(ctx context.Context) (Conn, error)
 	// Capabilities reports what this transport can do. It is static per kind.
 	Capabilities() Capabilities

@@ -8,7 +8,7 @@ backend services, data pipelines, and edge consumers.
   buffering, no silent drops.
 - **Full gap recovery** — reconnect-with-replay, advisory `gap` → live `replay`, and `history`.
 - **Automatic single-flight auth** — proactive + reactive token refresh, API-key → JWT escalation.
-- **WebSocket** transport (SSE is planned, not yet implemented — `WithTransport(TransportSSE)` returns `ErrSSENotImplemented` rather than silently falling back to WebSocket), **REST publish**, **push** subscription management.
+- **WebSocket** and **SSE** transports (`WithTransport(TransportSSE)` selects the receive-only Server-Sent Events transport, with `Last-Event-ID` gap recovery; it never silently falls back to WebSocket — see [sukko ADR-0042](https://github.com/sukko-dev/sukko/blob/main/docs/adr/0042-sse-is-a-supported-receive-only-transport-for-all-sdks.md)), **REST publish**, **push** subscription management.
 - **`context.Context`-driven** lifecycle, typed errors (`errors.Is`/`errors.As`), pull-based `Stats()`.
 - Built to the AsyncAPI v1.4.0 + gateway OpenAPI contracts.
 

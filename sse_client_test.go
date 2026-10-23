@@ -128,6 +128,12 @@ func TestSSEClient_SubscribeUnsubscribeBounceAndPark(t *testing.T) {
 	if got := s.channelsAt(3); len(got) != 1 || got[0] != "c" {
 		t.Fatalf("connect 4 (wake) channels = %v, want [c]", got)
 	}
+	// Every redial above was a deliberate bounce or a park-wake — none a reconnect. A
+	// reconnect here means an epoch died on a healthy stream (waitConnects' >= would
+	// otherwise let a reconnect loop satisfy the connect counts).
+	if n := c.Stats().Reconnects; n != 0 {
+		t.Fatalf("Reconnects = %d, want 0 (an epoch died on a healthy stream)", n)
+	}
 }
 
 func TestSSEClient_PublishIsReceiveOnly(t *testing.T) {
